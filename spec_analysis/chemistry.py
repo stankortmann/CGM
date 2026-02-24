@@ -1,6 +1,7 @@
 from unyt import g, mol, Msun, cm, s, K
 import unyt as u
 import numpy as np
+from scipy.interpolate import RegularGridInterpolator
 
 
 class elements:
@@ -32,6 +33,22 @@ class elements:
         particles = avogadro_number / molar_masses[element] 
         
         return particles
+    @staticmethod
+    def get_particle_density(element,gas_particles,physical=True):
+        """
+        Returns the number of particles of a given element in a gas particle.
+        """
+        element_frac = getattr(gas_particles.element_mass_fractions, element)
+        if physical:
+            element_mass_densities = gas_particles.densities.to_physical() * element_frac
+        #comoving, almost never used
+        else:
+            element_mass_densities = gas_particles.densities * element_frac
+        element_particles_densities = element_mass_densities * elements.particles_per_mass(element)
+        
+        return element_particles_densities
+
+
 
 class simulation_constants:
     def __init__(self,resolution):
@@ -47,3 +64,55 @@ class simulation_constants:
             7: 1.47e7 * Msun,
         }
         return gas_mass_dict[resolution]
+
+
+#Uses the CHIMES equilibrium table to extract the abundance of a given ion for a given log_Z, log_T, and log_nH_cm3
+class chimes:
+    def __init__(self, chimes_table_path):
+        self.chimes_table_path = chimes_table_path
+        self.load_chimes_table()
+
+
+    def load_chimes_table(self):
+        with h5py.File(self.chimes_table_path, "r") as f:
+    
+            # 4D abundance grid
+            #abundances=(N_Temperatures x N_Densities x N_Metallicities x N_species)
+            self.abundances = f["Abundances"][:]  
+            
+            
+            self.log_T_table  = f["TableBins/Temperatures"][:]
+            self.log_nH_cm3_table = f["TableBins/Densities"][:]
+            self.log_Z_table  = f["TableBins/Metallicities"][:]
+
+        print("Shape CHIMES equilibrium table:", self.abundances.shape)
+        
+    def extract_ion_abundance(self,ion,log_Z,log_T,log_nH_cm3):
+        # Load the Chimes table using chimestools
+        chimes_dict = {"elec": 0,
+               "HI": 1,
+               "HII": 2,
+               "Hm": 3,
+               "HeI": 4,
+               "HeII": 5,
+               "HeIII": 6,
+               "CI": 7,
+               "CII": 8,
+               "CIII": 9,}
+        ion_index = chimes_dict[ion]
+        
+        ion_abundance_table = self.abundances[:,:, :, ion_index]
+
+        # Interpolate the abundance for the given log_Z, log_T, and log_nh_cm3
+        interp = RegularGridInterpolator( (self.log_T_table, self.log_nH_cm3_table, self.log_Z_table), 
+                                            ion_abundance_table, 
+                                            bounds_error=False, 
+                                            fill_value=None)
+        #set metallicity ==Nan to lowest metallicity in the table to avoid issues with interpolation when logZ=-inf
+        log_Z = np.where(np.isnan(log_Z), np.min(self.log_Z_table), log_Z)
+        ion_abundance = interp((log_T, log_nH_cm3, log_Z))
+        
+        #this is in log10(n_ion/n_H)
+        return ion_abundance
+        
+        

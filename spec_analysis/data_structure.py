@@ -4,6 +4,7 @@ from typing import List, Union
 @dataclass
 class Simulation:
     main_dir: str
+    chimes_table_dir: str
     box_length: int
     resolution: int
     name: str
