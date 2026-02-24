@@ -1,0 +1,17 @@
+# --- Results folders ---
+
+**/results/
+**/Results/
+*.npz
+*.hdf5
+*.png
+*/old/
+
+
+# Packaging
+__pycache__/
+build/
+dist/
+*.egg-info/
+*.egg
+
