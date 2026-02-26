@@ -10,6 +10,15 @@ data_output:
   main_dir: /cosma8/data/do012/dc-kort1/CGM/ #this is where the I store my outputs, change if necessary
   results_dir: test #do not touch!
 
+window:
+    x: [0.0, 1.0]
+    y: [0.0, 1.0]
+    z: [0.0, 0.2]
+    resolution: 100 #number of bins in the histogram, change if necessary
+
+chemistry:
+  element: hydrogen
+  ion: Hm
 
 monitoring:
   cpu_ram_monitor: off

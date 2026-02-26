@@ -39,7 +39,7 @@ class elements:
         """
         Returns the number of particles of a given element in a gas particle.
         """
-        element_frac = getattr(gas_particles.element_mass_fractions, element)
+        element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!
         if physical:
             element_mass_densities = gas_particles.densities.to_physical() * element_frac #always physical!!!
         #comoving, almost never used
@@ -48,7 +48,17 @@ class elements:
         element_particles_densities = element_mass_densities * elements.particles_per_mass(element)
         
         return element_particles_densities
-
+    @staticmethod
+    def get_particle_mass(element,gas_particles):
+        element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!
+        element_mass= gas_particles.masses.to_physical() * element_frac #always physical!!!
+        return element_mass
+    @staticmethod
+    def get_particle_number(element,gas_particles):
+        element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!
+        element_mass= gas_particles.masses.to_physical() * element_frac #always physical!!!
+        element_number = element_mass * elements.particles_per_mass(element)
+        return element_number
 
 
 class simulation_constants:
@@ -83,12 +93,11 @@ class chimes:
             
             
             self.log_T_table  = f["TableBins/Temperatures"][:]
-            self.log_nH_cm3_table = f["TableBins/Densities"][:]
+            self.log_n_H_cm3_table = f["TableBins/Densities"][:]
             self.log_Z_table  = f["TableBins/Metallicities"][:]
 
-        print("Shape CHIMES equilibrium table:", self.abundances.shape)
         
-    def extract_ion_abundance(self,ion,log_Z,log_T,log_nH_cm3):
+    def extract_ion_abundance(self,ion,log_Z,log_T,log_n_H_cm3):
         # Load the Chimes table using chimestools
         chimes_dict = {"elec": 0,
                "HI": 1,
@@ -104,14 +113,30 @@ class chimes:
         
         ion_abundance_table = self.abundances[:,:, :, ion_index]
 
-        # Interpolate the abundance for the given log_Z, log_T, and log_nh_cm3
-        interp = RegularGridInterpolator( (self.log_T_table, self.log_nH_cm3_table, self.log_Z_table), 
+        # Interpolate the abundance for the given log_Z, log_T, and log_n_element_cm3
+        interp = RegularGridInterpolator( (self.log_T_table, self.log_n_H_cm3_table, self.log_Z_table), 
                                             ion_abundance_table, 
                                             bounds_error=False, 
                                             fill_value=None)
         #set metallicity ==Nan to lowest metallicity in the table to avoid issues with interpolation when logZ=-inf
-        log_Z = np.where(np.isnan(log_Z), np.min(self.log_Z_table), log_Z)
-        ion_abundance = interp((log_T, log_nH_cm3, log_Z))
+        
+        
+        
+        #clip all the input values to be within the bounds of the table to avoid interpolation errors
+        log_T = np.clip(log_T,
+                        np.min(self.log_T_table),
+                        np.max(self.log_T_table))
+
+        log_n_H_cm3 = np.clip(log_n_H_cm3,
+                            np.min(self.log_n_H_cm3_table),
+                            np.max(self.log_n_H_cm3_table))
+
+        log_Z = np.clip(log_Z,
+                        np.min(self.log_Z_table),
+                        np.max(self.log_Z_table))
+        
+        #actual interpolation
+        ion_abundance = interp((log_T, log_n_H_cm3, log_Z))
         
         #this is in log10(n_ion/n_element)
         return ion_abundance

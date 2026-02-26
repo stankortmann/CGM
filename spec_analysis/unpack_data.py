@@ -9,28 +9,29 @@ from swiftsimio import SWIFTDataset
 import swiftsimio as swift
 
 
+
 class unwrapper:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.snapshot_path = self.file_snapshot()
-        self.soap_hbt_path = self.file_soap_hbt()
-        self.redshift, self.snapshot_type = self.unpack_redshift_type()
-        self.chimes_table_path = self.file_chimes_table()
+        self.snapshot_path = self._file_snapshot()
+        self.soap_hbt_path = self._file_soap_hbt()
+        self.redshift, self.snapshot_type = self._unpack_redshift_type()
+        self.chimes_table_path = self._file_chimes_table()
 
-    def file_snapshot(self):
+    def _file_snapshot(self):
         snapshot_path = str(
-                Path(cfg.simulation.main_dir)
-                /f"L{cfg.simulation.box_length:03d}_m{cfg.simulation.resolution}"
-                /cfg.simulation.name
+                Path(self.cfg.simulation.main_dir)
+                /f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}"
+                /self.cfg.simulation.name
                 /"snapshots"
-                /f"colibre_{cfg.simulation.snapshot_number:04d}"
-                /f"colibre_{cfg.simulation.snapshot_number:04d}.hdf5"
+                /f"colibre_{self.cfg.simulation.snapshot_number:04d}"
+                /f"colibre_{self.cfg.simulation.snapshot_number:04d}.hdf5"
 
                 )
         
         self.mask_snapshot = swift.mask(snapshot_path)
         # The full metadata object is available from within the mask
-        self.box_size = self.mask_snapshot.metadata.boxsize #boxsize
+        self.box_size = self.mask_snapshot.metadata.boxsize[0] #boxsize in physical units  
         return snapshot_path
     
     def load_snapshot(self, load_region=None):
@@ -45,14 +46,14 @@ class unwrapper:
         return snapshot
     
 
-    def file_soap_hbt(self):
+    def _file_soap_hbt(self):
         #open with swiftsimio
         soap_hbt_path = str(
-                        Path(cfg.simulation.main_dir)
-                        /f"L{cfg.simulation.box_length:03d}_m{cfg.simulation.resolution}"
-                        /cfg.simulation.name
+                        Path(self.cfg.simulation.main_dir)
+                        /f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}"
+                        /self.cfg.simulation.name
                         /"SOAP-HBT"
-                        /f"halo_properties_{cfg.simulation.snapshot_number:04d}.hdf5"
+                        /f"halo_properties_{self.cfg.simulation.snapshot_number:04d}.hdf5"
                     )
         return soap_hbt_path
     def load_soap_hbt(self):
@@ -60,11 +61,11 @@ class unwrapper:
         soap_hbt = load(self.soap_hbt_path)
         return soap_hbt
 
-    def unpack_redshift_type(self):
+    def _unpack_redshift_type(self):
         #redshift list and output list of the simulation, to be used for loading the correct chimes table
-        redshift_list_path= str(Path(cfg.simulation.main_dir)
-            /f"L{cfg.simulation.box_length:03d}_m{cfg.simulation.resolution}"
-            /cfg.simulation.name
+        redshift_list_path= str(Path(self.cfg.simulation.main_dir)
+            /f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}"
+            /self.cfg.simulation.name
             /"output_list.txt")
 
         #redshift extraction from the output list, to be used for loading the correct chimes table
@@ -75,31 +76,16 @@ class unwrapper:
             names=["redshift", "type"]
         )
         redshift_list["type"] = redshift_list["type"].str.strip()
-        redshift=float(redshift_list.iloc[cfg.simulation.snapshot_number]["redshift"])
-        snapshot_type=redshift_list.iloc[cfg.simulation.snapshot_number]["type"]
+        redshift=float(redshift_list.iloc[self.cfg.simulation.snapshot_number]["redshift"])
+        snapshot_type=redshift_list.iloc[self.cfg.simulation.snapshot_number]["type"]
 
         return redshift, snapshot_type
     
-    def file_chimes_table(self):
+    def _file_chimes_table(self):
         chimes_table_path = str(
-            Path(cfg.simulation.chimes_table_dir)
+            Path(self.cfg.simulation.chimes_table_dir)
             /f"z{self.redshift:.3f}_eqm.hdf5"
         )
         return chimes_table_path
-    
-    def load_chimes_table(self, element):
-        
-        with h5py.File(self.chimes_table_path, "r") as f:
-    
-            # 4D abundance grid
-            #abundances=(N_Temperatures x N_Densities x N_Metallicities x N_species)
-            abundances = f["Abundances"][:]  
-            
-            
-            log_T_table  = f["TableBins/Temperatures"][:]
-            log_nH_cm3_table = f["TableBins/Densities"][:]
-            log_Z_table  = f["TableBins/Metallicities"][:]
-        
-        return abundances[:, :, :, element], log_T_table, log_nH_cm3_table, log_Z_table
     
     

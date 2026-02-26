@@ -19,6 +19,7 @@ from spec_analysis import cosmology as cosmo
 from spec_analysis import chemistry as chem
 from spec_analysis import plot
 from spec_analysis import unpack_data
+from spec_analysis import column_density
 
 if __name__ == "__main__":
 
@@ -39,193 +40,121 @@ if __name__ == "__main__":
     cfg = ds.Config(
         simulation=ds.Simulation(**cfg_dict['simulation']),
         data_output=ds.Data_output(**cfg_dict['data_output']),
-        monitoring=ds.Monitoring(**cfg_dict['monitoring'])    
+        monitoring=ds.Monitoring(**cfg_dict['monitoring']),
+        window=ds.Window(**cfg_dict['window']),
+        chemistry=ds.Chemistry(**cfg_dict['chemistry'])
     )
 
 
 
 
 
+data_unpacker = unpack_data.unwrapper(cfg)
+comoving_box_size = data_unpacker.box_size.to("Mpc")
+cfg.window.x,cfg.window.y,cfg.window.z = [x*comoving_box_size for x in cfg.window.x], [y*comoving_box_size for y in cfg.window.y], [z*comoving_box_size for z in cfg.window.z]
 
+dx=(cfg.window.x[1]-cfg.window.x[0])/cfg.window.resolution
+dy=(cfg.window.y[1]-cfg.window.y[0])/cfg.window.resolution
+dz=(cfg.window.z[1]-cfg.window.z[0])/cfg.window.resolution
 
-# Load snapshot
-
-snapshot_path = str(
-    Path(cfg.simulation.main_dir)
-    /f"L{cfg.simulation.box_length:03d}_m{cfg.simulation.resolution}"
-    /cfg.simulation.name
-    /"snapshots"
-    /f"colibre_{cfg.simulation.snapshot_number:04d}"
-    /f"colibre_{cfg.simulation.snapshot_number:04d}.hdf5"
-)
-
-#the SOAP-HBT halo properties file
-
-soap_path = str(
-    Path(cfg.simulation.main_dir)
-    /f"L{cfg.simulation.box_length:03d}_m{cfg.simulation.resolution}"
-    /cfg.simulation.name
-    /"SOAP-HBT"
-    /f"halo_properties_{cfg.simulation.snapshot_number:04d}.hdf5"
-)
-
-#redshift list and output list of the simulation, to be used for loading the correct chimes table
-redshift_list_path= str(Path(cfg.simulation.main_dir)
-    /f"L{cfg.simulation.box_length:03d}_m{cfg.simulation.resolution}"
-    /cfg.simulation.name
-    /"output_list.txt")
-
-#redshift extraction from the output list, to be used for loading the correct chimes table
-redshift_list = pandas.read_csv(
-    redshift_list_path,
-    comment="#",
-    header=None,
-    names=["redshift", "type"]
-)
-redshift_list["type"] = redshift_list["type"].str.strip()
-redshift=float(redshift_list.iloc[cfg.simulation.snapshot_number]["redshift"])
-snapshot_type=redshift_list.iloc[cfg.simulation.snapshot_number]["type"]
-
-#load the chimes abundances table for the same snapshot
-chimes_path = str(
-    Path(cfg.simulation.chimes_table_dir)
-    /f"z{redshift:.3f}_eqm.hdf5"
-)
-
-
-
-
-
-
-
-mask = swift.mask(snapshot_path)
-# The full metadata object is available from within the mask
-b = mask.metadata.boxsize #boxsize
-
-#histogram of column density of the gas particles in aforementioned window with dz mentioned above. Now for loading still comoving
-resolution = 1000
-xmin = 0*b[0]
-xmax = 1*b[0] 
-dx=(xmax-xmin)/resolution
-
-ymin=0*b[1]
-ymax=1*b[1]
-dy=(ymax-ymin)/resolution
-
-zmin = 0.0* b[2]
-zmax = 0.2* b[2]
-dz = (zmax - zmin)/resolution
-
-load_region = [
-        [xmin, xmax],
-        [ymin, ymax],
-        [zmin, zmax]
+region = [
+        cfg.window.x,
+        cfg.window.y,
+        cfg.window.z
     ]
 
-# Constrain the mask
-mask.constrain_spatial(load_region)
+snapshot = data_unpacker.load_snapshot(load_region=region)
 
-
-
-# Now load the snapshot with this mask
-snapshot = load(snapshot_path, mask=mask)
-
-
-#load the gas particles
 gas_particles = snapshot.gas
 
-#hydrogen number density in cm^-3 for each gas particle
-nh = chem.elements.get_particle_density(element="hydrogen",
+
+#number of physical hydrogen particles of each gas particle
+n_element =chem.elements.get_particle_number(cfg.chemistry.element, gas_particles).value
+
+#element density for each gas particle
+n_element_cm3 = chem.elements.get_particle_density(element=cfg.chemistry.element,
                                         gas_particles=gas_particles,
-                                        physical=True)
-nh_cm3= nh.to("1/cm**3")
+                                        physical=True).to("1/cm**3")
+
+#We always need the hydrogen number density for the CHIMES table, even if we are not looking at hydrogen
+if cfg.chemistry.ion != "hydrogen":
+    n_H_cm3 = chem.elements.get_particle_density(element="hydrogen",
+                                        gas_particles=gas_particles,
+                                        physical=True).to("1/cm**3")
+else:
+    n_H_cm3 = n_element_cm3
 
 #temperature for each gas particle
-temperatures = snapshot.gas.temperatures.to_physical()
-print(temperatures[:5])#metallicity for each gas particle in units of solar metallicity
-metallicities= snapshot.gas.metal_mass_fractions.to_physical()
+temperatures = gas_particles.temperatures.to_physical()
+#metallicity for each gas particle
+metallicities= gas_particles.metal_mass_fractions.to_physical()
 #hybrid CHIMES paper solar metallicity (https://richings.bitbucket.io/chimes/user_guide/ChimesData/equilibrium_abundances.html)
 solar_metallicity = 0.0129
 metallicities = metallicities.value / solar_metallicity #in units of solar metallicity
-print("minimum solar metallicity:", np.min(metallicities))
 
-positions = snapshot.gas.coordinates.to_physical()
-
+positions = gas_particles.coordinates.to_physical()
 
 
 
 
 #column density histogram in x,y plane
-counts_histogram=np.histogram2d(x=positions[:,0].to("Mpc").value, #ensure same units for positions
+n_element_hist=np.histogram2d(x=positions[:,0].to("Mpc").value, #ensure same units for positions
                                 y=positions[:,1].to("Mpc").value, 
-                                bins=(resolution.to("Mpc").value)**2, #squared as to ensure that the total number of bins is resolution^2, as we are doing a 2D histogram 
-                                range=[[xmin, xmax], [ymin, ymax]],
-                                weights=nh_cm3.value)
+                                bins=(cfg.window.resolution,cfg.window.resolution), #squared as to ensure that the total number of bins is resolution^2, as we are doing a 2D histogram 
+                                range=[[float(cfg.window.x[0].to("Mpc").to_physical().value), float(cfg.window.x[1].to("Mpc").to_physical().value)],
+                                     [float(cfg.window.y[0].to("Mpc").to_physical().value), float(cfg.window.y[1].to("Mpc").to_physical().value)]],
+                                weights=n_element)
 
 
 # Unpack histogram
-particles_hist, xedges, yedges = counts_histogram
+n_element_counts, xedges, yedges = n_element_hist
 
-particle_column_density = particles_hist/((xedges[1]-xedges[0])*(yedges[1]-yedges[0])) #convert to column density by dividing by the area of the bin and multiplying by the depth of the box
-particle_column_density = particle_column_density *.to("1/cm**2").value #convert to column density in cm^-2 by multiplying by the depth of the box in cm
+n_element_column_density = n_element_counts/(dx.to_physical()*dy.to_physical()) #convert to column density by dividing by the area of the bin and multiplying by the depth of the box
+n_element_column_density = n_element_column_density.to("1/cm**2").value #convert to column density in cm^-2 by multiplying by the depth of the box in cm
 #setting up the plotter with the constant edges for temperature and density, so that all the plots have the same axes and can be easily compared
 plotter = plot.column_density_plotter(x_edges=xedges, y_edges=yedges)
 
-plotter.plot_xy(column_density_values=particle_column_density, column_density_unit=r"$n_H [cm^{-2}]$", output_path="test_colibre/column_density_nH.png")
-print("Finished test_colibre/column_density_nH.png")
-
-###----- METALICITY HISTOGRAM -----###
-
-metallicity_histogram=np.histogram2d(x=np.log10(nh_cm3.value), 
-                                y=np.log10(temperatures.value), 
-                                bins=1000, 
-                                range=[[log_nh_cm3_min, log_nh_cm3_max], [log_temp_min, log_temp_max]],
-                                weights=metallicities)
-
-metallicities_hist, _,_ = metallicity_histogram
-
-#Whenever there are no particles, we set the metallicity to NaN to avoid plotting issues with log scale
-average_metallicity = np.divide(
-    metallicities_hist,
-    particles_hist,
-    out=np.full_like(metallicities_hist, np.nan, dtype=float),
-    where=particles_hist != 0
-)
-
-plotter.plot(density_values=average_metallicity, density_unit=r"$<Z/Z_\odot>$", output_path="test_colibre/metallicity_hist.png")
-print("Finished test_colibre/metallicity_hist.png")
-
-
+plotter.plot_xy(column_density_values=n_element_column_density, 
+                column_density_unit=r"$n_{%s} [cm^{-2}]$" % cfg.chemistry.element,
+                title="Column density of %s in x-y plane" % cfg.chemistry.element,
+                log_scale=True, 
+                output_path="test_colibre/column_density_%s.png" % cfg.chemistry.element)
+print("Finished test_colibre/column_density_%s.png" % cfg.chemistry.element)
 
 ###----- HI HISTOGRAM -----###
 
 
 #now the chimes ion equilibrium densities
-chimes=chem.chimes(chimes_path)
-HI_abundance=chimes.extract_ion_abundance(ion="HI", 
+chimes=chem.chimes(data_unpacker.chimes_table_path)
+log_ion_element_fraction=chimes.extract_ion_abundance(ion=cfg.chemistry.ion, 
                                         log_Z=np.log10(metallicities,
                                                         where=metallicities>0,
-                                                        #make sure to avoid logZ=-inf
-                                                        out=np.full_like(metallicities, np.nan, dtype=float)), 
+                                                        #make sure to avoid logZ=-inf, so set this at -40 which is much lower than the lowest logZ in the table
+                                                        out=np.full_like(metallicities, -40, dtype=float)), 
                                         log_T=np.log10(temperatures), 
-                                        log_nH_cm3=np.log10(nh_cm3)
+                                        log_n_H_cm3=np.log10(n_H_cm3)
                                         )
-HI_histogram=np.histogram2d(x=np.log10(nh_cm3.value), 
-                                y=np.log10(temperatures.value), 
-                                bins=1000, 
-                                range=[[log_nh_cm3_min, log_nh_cm3_max], [log_temp_min, log_temp_max]],
-                                weights=HI_abundance)
+n_ion = n_element * 10**log_ion_element_fraction #number of HI particles for each gas particle
+
+n_ion_hist=np.histogram2d(x=positions[:,0].to("Mpc").value, #ensure same units for positions
+                                y=positions[:,1].to("Mpc").value, 
+                                bins=(cfg.window.resolution,cfg.window.resolution), #squared as to ensure that the total number of bins is resolution^2, as we are doing a 2D histogram 
+                                range=[[float(cfg.window.x[0].to("Mpc").to_physical().value), float(cfg.window.x[1].to("Mpc").to_physical().value)],
+                                     [float(cfg.window.y[0].to("Mpc").to_physical().value), float(cfg.window.y[1].to("Mpc").to_physical().value)]],
+                                weights=n_ion)
 # Unpack histogram
-HI_abundance_hist, _,_ = HI_histogram
+n_ion_counts, _, _ = n_ion_hist
 
-average_HI = np.divide(
-    HI_abundance_hist,
-    particles_hist,
-    out=np.full_like(HI_abundance_hist, fill_value=np.nan, dtype=float),
-    where=particles != 0
-)
+n_ion_column_density = n_ion_counts/(dx.to_physical()*dy.to_physical()) #convert to column density by dividing by the area of the bin and multiplying by the depth of the box
+n_ion_column_density = n_ion_column_density.to("1/cm**2").value #convert to column density in cm^-2 by multiplying by the depth of the box in cm
+#setting up the plotter with the constant edges for temperature and density, so that all the plots have the same axes and can be easily compared
 
-plotter.plot(density_values=average_HI, density_unit=r"$<n_{HI}/n_H>$", output_path="test_colibre/HI_abundance_hist.png")
-print("Finished test_colibre/HI_abundance_hist.png")
+plotter.plot_xy(column_density_values=n_ion_column_density, 
+                column_density_unit=r"$n_{%s} [cm^{-2}]$" % cfg.chemistry.ion,
+                title="Column density of %s in x-y plane" % cfg.chemistry.ion,
+                log_scale=True, 
+                output_path="test_colibre/column_density_%s.png" % cfg.chemistry.ion)
+print("Finished test_colibre/column_density_%s.png" % cfg.chemistry.ion)
+
 
 
