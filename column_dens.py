@@ -13,10 +13,12 @@ import yaml
 import unyt as u
 import pandas
 
+#own modules
 from spec_analysis import data_structure as ds
 from spec_analysis import cosmology as cosmo
 from spec_analysis import chemistry as chem
 from spec_analysis import plot
+from spec_analysis import unpack_data
 
 if __name__ == "__main__":
 
@@ -99,13 +101,24 @@ chimes_path = str(
 mask = swift.mask(snapshot_path)
 # The full metadata object is available from within the mask
 b = mask.metadata.boxsize #boxsize
-# load_region is a 3x2 list [[left, right], [bottom, top], [front, back]]
-# load_region is a 3x2 list [[left, right], [bottom, top], [front, back]]
+
+#histogram of column density of the gas particles in aforementioned window with dz mentioned above. Now for loading still comoving
+resolution = 1000
+xmin = 0*b[0]
+xmax = 1*b[0] 
+dx=(xmax-xmin)/resolution
+
+ymin=0*b[1]
+ymax=1*b[1]
+dy=(ymax-ymin)/resolution
+
 zmin = 0.0* b[2]
-zmax = 0.2 * b[2]
+zmax = 0.2* b[2]
+dz = (zmax - zmin)/resolution
+
 load_region = [
-        [0.0 * b[0], 1.0 * b[0]],
-        [0.0 * b[1], 1.0 * b[1]],
+        [xmin, xmax],
+        [ymin, ymax],
         [zmin, zmax]
     ]
 
@@ -118,46 +131,48 @@ mask.constrain_spatial(load_region)
 snapshot = load(snapshot_path, mask=mask)
 
 
-
+#load the gas particles
 gas_particles = snapshot.gas
 
-
+#hydrogen number density in cm^-3 for each gas particle
 nh = chem.elements.get_particle_density(element="hydrogen",
                                         gas_particles=gas_particles,
                                         physical=True)
 nh_cm3= nh.to("1/cm**3")
 
-temperatures = snapshot.gas.temperatures
+#temperature for each gas particle
+temperatures = snapshot.gas.temperatures.to_physical()
+print(temperatures[:5])#metallicity for each gas particle in units of solar metallicity
 metallicities= snapshot.gas.metal_mass_fractions.to_physical()
 #hybrid CHIMES paper solar metallicity (https://richings.bitbucket.io/chimes/user_guide/ChimesData/equilibrium_abundances.html)
 solar_metallicity = 0.0129
 metallicities = metallicities.value / solar_metallicity #in units of solar metallicity
 print("minimum solar metallicity:", np.min(metallicities))
 
-
-#histogram of temperature vs density
-log_temp_min = 0
-log_temp_max = 10
-
-log_nh_cm3_min = -9
-log_nh_cm3_max = 6
+positions = snapshot.gas.coordinates.to_physical()
 
 
-counts_histogram=np.histogram2d(x=np.log10(nh_cm3.value), 
-                                y=np.log10(temperatures.value), 
-                                bins=1000, 
-                                range=[[log_nh_cm3_min, log_nh_cm3_max], [log_temp_min, log_temp_max]],
-                                weights=None)
+
+
+
+#column density histogram in x,y plane
+counts_histogram=np.histogram2d(x=positions[:,0].to("Mpc").value, #ensure same units for positions
+                                y=positions[:,1].to("Mpc").value, 
+                                bins=(resolution.to("Mpc").value)**2, #squared as to ensure that the total number of bins is resolution^2, as we are doing a 2D histogram 
+                                range=[[xmin, xmax], [ymin, ymax]],
+                                weights=nh_cm3.value)
 
 
 # Unpack histogram
 particles_hist, xedges, yedges = counts_histogram
 
+particle_column_density = particles_hist/((xedges[1]-xedges[0])*(yedges[1]-yedges[0])) #convert to column density by dividing by the area of the bin and multiplying by the depth of the box
+particle_column_density = particle_column_density *.to("1/cm**2").value #convert to column density in cm^-2 by multiplying by the depth of the box in cm
 #setting up the plotter with the constant edges for temperature and density, so that all the plots have the same axes and can be easily compared
-plotter = plot.temperature_density_plotter(density_edges=xedges, temperature_edges=yedges)
+plotter = plot.column_density_plotter(x_edges=xedges, y_edges=yedges)
 
-plotter.plot(density_values=particles_hist, density_unit="Number of particles", output_path="test_colibre/particles_hist.png")
-print("Finished test_colibre/particles_hist.png")
+plotter.plot_xy(column_density_values=particle_column_density, column_density_unit=r"$n_H [cm^{-2}]$", output_path="test_colibre/column_density_nH.png")
+print("Finished test_colibre/column_density_nH.png")
 
 ###----- METALICITY HISTOGRAM -----###
 
@@ -207,8 +222,10 @@ average_HI = np.divide(
     HI_abundance_hist,
     particles_hist,
     out=np.full_like(HI_abundance_hist, fill_value=np.nan, dtype=float),
-    where=particles_hist != 0
+    where=particles != 0
 )
 
 plotter.plot(density_values=average_HI, density_unit=r"$<n_{HI}/n_H>$", output_path="test_colibre/HI_abundance_hist.png")
 print("Finished test_colibre/HI_abundance_hist.png")
+
+

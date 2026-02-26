@@ -2,6 +2,7 @@
 
 **/results/
 **/Results/
+**/slurm/
 *.npz
 *.hdf5
 *.png

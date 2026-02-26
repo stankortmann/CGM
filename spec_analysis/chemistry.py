@@ -2,6 +2,7 @@ from unyt import g, mol, Msun, cm, s, K
 import unyt as u
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
+import h5py
 
 
 class elements:
@@ -40,7 +41,7 @@ class elements:
         """
         element_frac = getattr(gas_particles.element_mass_fractions, element)
         if physical:
-            element_mass_densities = gas_particles.densities.to_physical() * element_frac
+            element_mass_densities = gas_particles.densities.to_physical() * element_frac #always physical!!!
         #comoving, almost never used
         else:
             element_mass_densities = gas_particles.densities * element_frac
@@ -112,7 +113,7 @@ class chimes:
         log_Z = np.where(np.isnan(log_Z), np.min(self.log_Z_table), log_Z)
         ion_abundance = interp((log_T, log_nH_cm3, log_Z))
         
-        #this is in log10(n_ion/n_H)
+        #this is in log10(n_ion/n_element)
         return ion_abundance
         
         
