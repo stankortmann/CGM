@@ -21,6 +21,11 @@ chemistry:
   element: hydrogen
   ion: Hm
 
+galaxy:
+  # choose: random, highest_gas_mass, most_bound_particles,
+  selection: most_bound_particles # choose: random, highest_gas_mass, most_bound_particles,
+  
+
 monitoring:
   cpu_ram_monitor: off
   monitor_interval: 240 #in seconds

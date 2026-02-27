@@ -40,8 +40,11 @@ if __name__ == "__main__":
         simulation=ds.Simulation(**cfg_dict['simulation']),
         data_output=ds.Data_output(**cfg_dict['data_output']),
         monitoring=ds.Monitoring(**cfg_dict['monitoring']),
-        window=ds.Window(**cfg_dict['window'])    
+        window=ds.Window(**cfg_dict['window']),
+        chemistry=ds.Chemistry(**cfg_dict['chemistry']),
+        galaxy=ds.Galaxy(**cfg_dict['galaxy'])
     )
+
 
 #unpacking of file names
 data_unpacker = unpack_data.unwrapper(cfg)

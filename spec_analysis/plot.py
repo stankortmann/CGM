@@ -118,18 +118,27 @@ class column_density_plotter:
                        ion=None,
                        element=None,
                        normalize=True,
+                       range_plot=None,
                        output_path=None):
         
         plt.figure()
+        
+        
+
         plt.hist(cddf, bins=log_bins,density=normalize)
         
         plt.ylabel("CDDF")
         if element != None:
             plt.title("CDDF of %s"%element)
             plt.xlabel(r"$log_{10}(N_{%s} [cm^{-2}])$"%element)
+            
         if ion != None:
             plt.title("CDDF of %s"%ion)
             plt.xlabel(r"$log_{10}(N_{%s} [cm^{-2}])$"%ion)
+
+        if range_plot != None:
+            plt.xlim(left=range_plot[0],right=range_plot[1])
+
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
         return

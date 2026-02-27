@@ -12,9 +12,11 @@ import swiftsimio as swift
 
 class unwrapper:
     def __init__(self, cfg):
+        
         self.cfg = cfg
         self.snapshot_path = self._file_snapshot()
-        self.soap_hbt_path = self._file_soap_hbt()
+        self.halo_properties_path = self._file_halo_properties()
+        self.gas_in_halo_properties_path=self._file_gas_in_halo_properties()
         self.redshift, self.snapshot_type = self._unpack_redshift_type()
         self.chimes_table_path = self._file_chimes_table()
 
@@ -46,20 +48,37 @@ class unwrapper:
         return snapshot
     
 
-    def _file_soap_hbt(self):
+    def _file_halo_properties(self):
         #open with swiftsimio
-        soap_hbt_path = str(
+        halo_properties_path = str(
                         Path(self.cfg.simulation.main_dir)
                         /f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}"
                         /self.cfg.simulation.name
                         /"SOAP-HBT"
                         /f"halo_properties_{self.cfg.simulation.snapshot_number:04d}.hdf5"
                     )
-        return soap_hbt_path
-    def load_soap_hbt(self):
+        return halo_properties_path
+    def load_halo_properties(self):
         #open with swiftsimio
-        soap_hbt = load(self.soap_hbt_path)
-        return soap_hbt
+        halo_properties = load(self.halo_properties_path)
+        return halo_properties
+
+    def _file_gas_in_halo_properties(self):
+        #open with swiftsimio
+        gas_in_halo_properties_path = str(
+                        Path(self.cfg.simulation.main_dir)
+                        /f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}"
+                        /self.cfg.simulation.name
+                        /"SOAP-HBT"
+                        /f"colibre_with_SOAP_membership_{self.cfg.simulation.snapshot_number:04d}.hdf5"
+                    )
+        return  gas_in_halo_properties_path
+    
+    def load_gas_in_halo_properties(self):
+        #open with swiftsimio
+        gas_in_halo_properties=load(self.gas_in_halo_properties_path)
+            
+        return gas_in_halo_properties
 
     def _unpack_redshift_type(self):
         #redshift list and output list of the simulation, to be used for loading the correct chimes table

@@ -57,6 +57,7 @@ class column_density_2d:
             range=[[float(self.cfg.window.x[0].to("Mpc").to_physical().value), float(self.cfg.window.x[1].to("Mpc").to_physical().value)],
                     [float(self.cfg.window.y[0].to("Mpc").to_physical().value), float(self.cfg.window.y[1].to("Mpc").to_physical().value)]],
             weights=n_element)
+            
         # Unpack histogram
         n_element_counts, self.xedges, self.yedges = n_element_hist
         #I have ensured that this is all in physical Mpc
@@ -64,7 +65,7 @@ class column_density_2d:
         #convert to column density by dividing by the area of the bin and multiplying by the depth of the box
         n_element_column_density = n_element_counts/(self.pixel_area) 
         #convert to column density in cm^-2 by multiplying by the depth of the box in cm
-        n_element_column_density = n_element_column_density.to("1/cm**2").value 
+        n_element_column_density = n_element_column_density.to("1/cm**2")
         
         return n_element, n_element_cm3, n_element_column_density
     
@@ -98,24 +99,29 @@ class column_density_2d:
 
         return n_ion_column_density
     
-    def column_density_distribution_function(self,ion,log_column_density_range=None,n_bins=100,normalize=True):
+    def column_density_distribution_function(self,ion=None,log_column_density_range=None,n_bins=100,normalize=True):
         
         #flatten the 2D array to just count the values
-        n_ion_column_density=self.column_density_ion(ion=ion).flatten()
+        if ion != None:
+            n_column_density=self.column_density_ion(ion=ion).flatten()
+        #we now take the element that we introduced in the initialization!
+        else:
+            n_column_density=self.n_element_column_density
+
         #extra safety measure and now only get the value
-        n_ion_column_density=n_ion_column_density.to("1/cm**2").value
+        n_column_density=n_column_density.to("1/cm**2").value
         #ensure that pixels without particles are filtered out
-        n_ion_column_density=n_ion_column_density[n_ion_column_density>0]
+        n_column_density=n_column_density[n_column_density>0]
         
-        log_n_ion_column_density=np.log10(n_ion_column_density)
+        log_n_column_density=np.log10(n_column_density)
         if log_column_density_range == None:
             #maybe clip the ranges here
-            min_log_cd=np.min(log_n_ion_column_density)
-            max_log_cd=np.max(log_n_ion_column_density)
+            min_log_cd=np.min(log_n_column_density)
+            max_log_cd=np.max(log_n_column_density)
             log_column_density_range = [min_log_cd,max_log_cd]
         
         log_bins=np.linspace(start=log_column_density_range[0],stop=log_column_density_range[1],num=n_bins)
-        cddf, edges = np.histogram(log_n_ion_column_density, bins=log_bins,density=normalize)
+        cddf, edges = np.histogram(log_n_column_density, bins=log_bins,density=normalize)
 
         dlog_n_ion_column_density = edges[1] - edges[0]
         log_bin_centers = 0.5 * (edges[1:] + edges[:-1])

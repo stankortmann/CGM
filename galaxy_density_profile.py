@@ -20,6 +20,7 @@ from spec_analysis import chemistry as chem
 from spec_analysis import plot
 from spec_analysis import unpack_data
 from spec_analysis import density_profiles
+from spec_analysis import galaxy_selection as gal_sel
 
 if __name__ == "__main__":
 
@@ -50,24 +51,15 @@ if __name__ == "__main__":
 
 
 
-
 data_unpacker = unpack_data.unwrapper(cfg)
 comoving_box_size = data_unpacker.box_size.to("Mpc")
-cfg.window.x,cfg.window.y,cfg.window.z = [x*comoving_box_size for x in cfg.window.x], [y*comoving_box_size for y in cfg.window.y], [z*comoving_box_size for z in cfg.window.z]
 
-dx=(cfg.window.x[1]-cfg.window.x[0])/cfg.window.resolution
-dy=(cfg.window.y[1]-cfg.window.y[0])/cfg.window.resolution
-dz=(cfg.window.z[1]-cfg.window.z[0])/cfg.window.resolution
+single_galaxy=gal_sel.single_galaxy(cfg=cfg,
+                                halo_properties=data_unpacker.load_halo_properties(), 
+                                gas_in_halo_properties=data_unpacker.load_gas_in_halo_properties())
 
-region = [
-        cfg.window.x,
-        cfg.window.y,
-        cfg.window.z
-    ]
 
-snapshot = data_unpacker.load_snapshot(load_region=region)
 
-gas_particles = snapshot.gas
 
 #init the 2d column density class
 cd_2d=density_profiles.column_density_2d(
@@ -81,7 +73,7 @@ n_element_column_density=cd_2d.n_element_column_density
 
 plotter = plot.column_density_plotter(x_edges=cd_2d.xedges, y_edges=cd_2d.yedges)
 
-plotter.plot_xy(column_density_values=n_element_column_density.to("1/cm**2").value, 
+plotter.plot_xy(column_density_values=n_element_column_density, 
                 column_density_unit=r"$n_{%s} [cm^{-2}]$" % cfg.chemistry.element,
                 title="Column density of %s in x-y plane" % cfg.chemistry.element,
                 log_scale=True, 
@@ -98,8 +90,7 @@ plotter.plot_xy(column_density_values=n_ion_column_density.to("1/cm**2").value,#
                 output_path="test_colibre/column_density_%s.png" % cfg.chemistry.ion)
 print("Finished test_colibre/column_density_%s.png" % cfg.chemistry.ion)
 
-ion_cddf,ion_log_bins=cd_2d.column_density_distribution_function(
-                                                        ion=cfg.chemistry.ion,
+ion_cddf,ion_log_bins=cd_2d.column_density_distribution_function(ion=cfg.chemistry.ion,
                                                         log_column_density_range=None, #if None it selects the complete range
                                                         n_bins=100,
                                                         normalize=True)
@@ -110,14 +101,13 @@ plotter.plot_cddf_hist(
                        ion=cfg.chemistry.ion,
                        element=None,
                        normalize=True,
-                       range_plot=None, #range of the log bins
+                       range_plot=[-2,2], #range of the log bins
                        output_path="test_colibre/cddf_%s.png"% cfg.chemistry.ion
                        )
 print("Finished test_colibre/cddf_%s.png" % cfg.chemistry.ion)
 
-
-
-element_cddf,element_log_bins=cd_2d.column_density_distribution_function(ion=None,
+"""
+element_cddf,element_log_bins=cd_2d.column_density_distribution_function(ion=cfg.chemistry.element,
                                                         log_column_density_range=None,
                                                         n_bins=100,
                                                         normalize=True)
@@ -131,7 +121,7 @@ plotter.plot_cddf_hist(
                        output_path="test_colibre/cddf_%s.png"% cfg.chemistry.element
                        )
 print("Finished test_colibre/cddf_%s.png" % cfg.chemistry.element)    
-
+"""
 
 
 

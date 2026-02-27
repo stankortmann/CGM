@@ -31,6 +31,10 @@ class Window:
 class Chemistry:
      element: str
      ion: str
+    
+@dataclass
+class Galaxy:
+     selection: str
 
      
 #important class that orders all the configurations
@@ -40,6 +44,7 @@ class Config:
     data_output: Data_output
     window: Window
     chemistry: Chemistry
+    galaxy: Galaxy
     monitoring: Monitoring
 
   
