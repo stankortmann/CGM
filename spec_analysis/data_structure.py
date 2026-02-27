@@ -31,6 +31,8 @@ class Window:
 class Chemistry:
      element: str
      ion: str
+
+     
 #important class that orders all the configurations
 @dataclass
 class Config:

@@ -10,9 +10,11 @@ class column_density_2d:
     """
     Computes 2D column density histograms for elements and their ions.
     Designed for SWIFT + CHIMES workflows.
+
+    We set up the class for a certain element and after that multiple ions can be used of this element
     """
 
-    def __init__(self,cfg,filenames,gas_particles):
+    def __init__(self,cfg,filenames,gas_particles,element):
         self.gas_particles=gas_particles
         self.cfg = cfg
         self.chimes = chem.chimes(filenames.chimes_table_path)
@@ -34,14 +36,18 @@ class column_density_2d:
 
         self.positions = gas_particles.coordinates.to_physical()
 
+        self.element=element
 
-    def column_density_element(self,element):
+        #retrieve all relevant parameters of the element
+        self.n_element, self.n_element_cm3, self.n_element_column_density=self._column_density_element()
+
+
+    def _column_density_element(self):
         #number of element particles in each gas particle
-        self.n_element =chem.elements.get_particle_number(
-            element, self.gas_particles).value
+        n_element =chem.elements.get_particle_number(self.element, self.gas_particles).value
         
         #element number density for each gas particle
-        self.n_element_cm3 = chem.element0s.get_particle_density(element=element,
+        n_element_cm3 = chem.elements.get_particle_density(element=self.element,
                                                 gas_particles=self.gas_particles,
                                                 physical=True).to("1/cm**3")
         n_element_hist=np.histogram2d(
@@ -50,7 +56,7 @@ class column_density_2d:
             bins=(self.cfg.window.resolution,self.cfg.window.resolution), #squared as to ensure that the total number of bins is resolution^2, as we are doing a 2D histogram 
             range=[[float(self.cfg.window.x[0].to("Mpc").to_physical().value), float(self.cfg.window.x[1].to("Mpc").to_physical().value)],
                     [float(self.cfg.window.y[0].to("Mpc").to_physical().value), float(self.cfg.window.y[1].to("Mpc").to_physical().value)]],
-            weights=self.n_element)
+            weights=n_element)
         # Unpack histogram
         n_element_counts, self.xedges, self.yedges = n_element_hist
         #I have ensured that this is all in physical Mpc
@@ -60,7 +66,7 @@ class column_density_2d:
         #convert to column density in cm^-2 by multiplying by the depth of the box in cm
         n_element_column_density = n_element_column_density.to("1/cm**2").value 
         
-        return n_element_column_density
+        return n_element, n_element_cm3, n_element_column_density
     
     #always first run the corresponding element in column_density_element !!
     #I can make a check of this later on
@@ -88,6 +94,43 @@ class column_density_2d:
         #convert to column density by dividing by the area of the bin and multiplying by the depth of the box
         n_ion_column_density = n_ion_counts/(self.pixel_area) 
         #convert to column density in cm^-2 by multiplying by the depth of the box in cm
-        n_ion_column_density = n_ion_column_density.to("1/cm**2").value 
+        n_ion_column_density = n_ion_column_density.to("1/cm**2")
 
         return n_ion_column_density
+    
+    def column_density_distribution_function(self,ion,log_column_density_range=None,n_bins=100,normalize=True):
+        
+        #flatten the 2D array to just count the values
+        n_ion_column_density=self.column_density_ion(ion=ion).flatten()
+        #extra safety measure and now only get the value
+        n_ion_column_density=n_ion_column_density.to("1/cm**2").value
+        #ensure that pixels without particles are filtered out
+        n_ion_column_density=n_ion_column_density[n_ion_column_density>0]
+        
+        log_n_ion_column_density=np.log10(n_ion_column_density)
+        if log_column_density_range == None:
+            #maybe clip the ranges here
+            min_log_cd=np.min(log_n_ion_column_density)
+            max_log_cd=np.max(log_n_ion_column_density)
+            log_column_density_range = [min_log_cd,max_log_cd]
+        
+        log_bins=np.linspace(start=log_column_density_range[0],stop=log_column_density_range[1],num=n_bins)
+        cddf, edges = np.histogram(log_n_ion_column_density, bins=log_bins,density=normalize)
+
+        dlog_n_ion_column_density = edges[1] - edges[0]
+        log_bin_centers = 0.5 * (edges[1:] + edges[:-1])
+        #for now only the CDDF and the log_bins are returned to plot the histogram inside the plotter class
+        return cddf,log_bins
+
+
+
+
+
+        
+        
+        
+
+
+
+
+

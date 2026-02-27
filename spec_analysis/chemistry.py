@@ -48,11 +48,15 @@ class elements:
         element_particles_densities = element_mass_densities * elements.particles_per_mass(element)
         
         return element_particles_densities
+
+        
     @staticmethod
     def get_particle_mass(element,gas_particles):
         element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!
         element_mass= gas_particles.masses.to_physical() * element_frac #always physical!!!
         return element_mass
+
+
     @staticmethod
     def get_particle_number(element,gas_particles):
         element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!

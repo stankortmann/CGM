@@ -42,6 +42,7 @@ class temperature_density_plotter:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.show()
         plt.close()
+        return
 
 class column_density_plotter:
     def __init__(self, x_edges,y_edges):
@@ -76,8 +77,8 @@ class column_density_plotter:
 
         plt.tight_layout()
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
-        plt.show()
         plt.close()
+        return
 
     def plot_r(self,
             column_density_values,
@@ -107,6 +108,29 @@ class column_density_plotter:
 
         plt.tight_layout()
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
-        plt.show()
         plt.close()
+        return
+
+
+    def plot_cddf_hist(self,
+                       cddf,
+                       log_bins,
+                       ion=None,
+                       element=None,
+                       normalize=True,
+                       output_path=None):
+        
+        plt.figure()
+        plt.hist(cddf, bins=log_bins,density=normalize)
+        
+        plt.ylabel("CDDF")
+        if element != None:
+            plt.title("CDDF of %s"%element)
+            plt.xlabel(r"$log_{10}(N_{%s} [cm^{-2}])$"%element)
+        if ion != None:
+            plt.title("CDDF of %s"%ion)
+            plt.xlabel(r"$log_{10}(N_{%s} [cm^{-2}])$"%ion)
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        return
 
