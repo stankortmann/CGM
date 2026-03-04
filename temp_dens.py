@@ -27,7 +27,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--config",
         type=str,
-        default="configurations/test.yaml",
+        default="configurations/test_box.yaml",
         help="Path to the YAML configuration file"
     )
     args=parser.parse_args()
@@ -51,7 +51,7 @@ data_unpacker = unpack_data.unwrapper(cfg)
 comoving_box_size = data_unpacker.box_size.to("Mpc")
 
 zmin = 0.0* comoving_box_size
-zmax = 0.2 * comoving_box_size
+zmax = 0.3 * comoving_box_size
 load_region = [
         [0.0 * comoving_box_size, 1.0 * comoving_box_size],
         [0.0 * comoving_box_size, 1.0 * comoving_box_size],
@@ -130,37 +130,39 @@ print("Finished test_colibre/metallicity_hist.png")
 
 
 
-###----- HI HISTOGRAM -----###
+###----- ion HISTOGRAM -----###
 
-
+ions=["HI","Hm","HII"]
 #now the chimes ion equilibrium densities
 chimes=chem.chimes(data_unpacker.chimes_table_path)
-HI_abundance=chimes.extract_ion_abundance(ion="HI", 
-                                        log_Z=np.log10(metallicities,
-                                                        where=metallicities>0,
-                                                        #make sure to avoid logZ=-inf, so set this at -40 which is much lower than the lowest logZ in the table
-                                                        out=np.full_like(metallicities, -40, dtype=float)), 
-                                        log_T=np.log10(temperatures), 
-                                        log_nH_cm3=np.log10(nh_cm3)
-                                        )
-HI_histogram=np.histogram2d(x=np.log10(nh_cm3.value), 
-                            y=np.log10(temperatures.value), 
-                            bins=1000, 
-                            range=[[log_nh_cm3_min, log_nh_cm3_max], [log_temp_min, log_temp_max]],
-                            weights=HI_abundance)
-# Unpack histogram
-HI_abundance_hist, _,_ = HI_histogram
+for ion in ions:
+    ion_abundance=chimes.extract_ion_abundance(ion=ion, 
+                                            log_Z=np.log10(metallicities,
+                                                            where=metallicities>0,
+                                                            #make sure to avoid logZ=-inf, so set this at -40 which is much lower than the lowest logZ in the table
+                                                            out=np.full_like(metallicities, -40, dtype=float)), 
+                                            log_T=np.log10(temperatures), 
+                                            log_n_H_cm3=np.log10(nh_cm3)
+                                            )
+    ion_histogram=np.histogram2d(x=np.log10(nh_cm3.value), 
+                                y=np.log10(temperatures.value), 
+                                bins=1000, 
+                                range=[[log_nh_cm3_min, log_nh_cm3_max], [log_temp_min, log_temp_max]],
+                                weights=ion_abundance)
+    # Unpack histogram
+    ion_abundance_hist, _,_ = ion_histogram
 
-average_HI = np.divide(
-    HI_abundance_hist,
-    particles_hist,
-    out=np.full_like(HI_abundance_hist, fill_value=np.nan, dtype=float),
-    where=particles_hist != 0
-)
+    average_ion = np.divide(
+        ion_abundance_hist,
+        particles_hist,
+        out=np.full_like(HI_abundance_hist, fill_value=np.nan, dtype=float),
+        where=particles_hist != 0
+    )
 
-plotter.plot(density_values=average_HI,
-             density_unit=r"$<Log_{10}(n_{HI}/n_H)>$",
-             log_scale=False, 
-             title="HI abundance",
-             output_path="test_colibre/HI_abundance_hist.png")
-print("Finished test_colibre/HI_abundance_hist.png")
+    plotter.plot(density_values=average_HI,
+                density_unit=r"$<Log_{10}(n_{%s}/n_H)>$"%ion,
+                log_scale=False, 
+                title="%s abundance"%ion,
+                output_path="test_colibre/%s_abundance_hist.png"%ion
+                )
+    print("Finished test_colibre/%s_abundance_hist.png"ion)

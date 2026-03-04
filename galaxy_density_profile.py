@@ -59,69 +59,65 @@ single_galaxy=gal_sel.single_galaxy(cfg=cfg,
                                 gas_in_halo_properties=data_unpacker.load_gas_in_halo_properties())
 
 
-
+gas_particles=single_galaxy.gas
 
 #init the 2d column density class
 cd_2d=density_profiles.column_density_2d(
     cfg=cfg,
     filenames=data_unpacker,
     gas_particles=gas_particles,
-    element=cfg.chemistry.element
+    element=cfg.chemistry.element,
+    halo=single_galaxy
 )
-### --- ELEMENT HISTOGRAM ---
+### --- ELEMENT --- ####
 n_element_column_density=cd_2d.n_element_column_density
 
-plotter = plot.column_density_plotter(x_edges=cd_2d.xedges, y_edges=cd_2d.yedges)
+plotter = plot.column_density_plotter(x_edges=cd_2d.xedges, y_edges=cd_2d.yedges,
+                                     data_unpacker=data_unpacker)
 
-plotter.plot_xy(column_density_values=n_element_column_density, 
-                column_density_unit=r"$n_{%s} [cm^{-2}]$" % cfg.chemistry.element,
-                title="Column density of %s in x-y plane" % cfg.chemistry.element,
+plotter.plot_xy(column_density_values=n_element_column_density.to("1/cm**2").value,
+                element=cfg.chemistry.element,
                 log_scale=True, 
-                output_path="test_colibre/column_density_%s.png" % cfg.chemistry.element)
-print("Finished test_colibre/column_density_%s.png" % cfg.chemistry.element)
+                )
 
-###----- ION HISTOGRAM -----###
 
-n_ion_column_density=cd_2d.column_density_ion(ion=cfg.chemistry.ion)
-plotter.plot_xy(column_density_values=n_ion_column_density.to("1/cm**2").value,#it is already ensures that is is in the correct units
-                column_density_unit=r"$n_{%s} [cm^{-2}]$" % cfg.chemistry.ion,
-                title="Column density of %s in x-y plane" % cfg.chemistry.ion,
-                log_scale=True, 
-                output_path="test_colibre/column_density_%s.png" % cfg.chemistry.ion)
-print("Finished test_colibre/column_density_%s.png" % cfg.chemistry.ion)
-
-ion_cddf,ion_log_bins=cd_2d.column_density_distribution_function(ion=cfg.chemistry.ion,
-                                                        log_column_density_range=None, #if None it selects the complete range
-                                                        n_bins=100,
-                                                        normalize=True)
-
-plotter.plot_cddf_hist(
-                       cddf=ion_cddf,
-                       log_bins=ion_log_bins,
-                       ion=cfg.chemistry.ion,
-                       element=None,
-                       normalize=True,
-                       range_plot=[-2,2], #range of the log bins
-                       output_path="test_colibre/cddf_%s.png"% cfg.chemistry.ion
-                       )
-print("Finished test_colibre/cddf_%s.png" % cfg.chemistry.ion)
-
-"""
-element_cddf,element_log_bins=cd_2d.column_density_distribution_function(ion=cfg.chemistry.element,
+element_cddf,element_bin_centers,element_bin_width=cd_2d.column_density_distribution_function(ion=None,
                                                         log_column_density_range=None,
                                                         n_bins=100,
                                                         normalize=True)
 
 plotter.plot_cddf_hist(
-                       cddf=ion_cddf,
-                       log_bins=ion_log_bins,
-                       ion=None,
+                       cddf=element_cddf,
+                       bin_centers=element_bin_centers,
+                       bin_width=element_bin_width,
                        element=cfg.chemistry.element,
-                       normalize=True,
-                       output_path="test_colibre/cddf_%s.png"% cfg.chemistry.element
                        )
-print("Finished test_colibre/cddf_%s.png" % cfg.chemistry.element)    
-"""
+   
+
+
+
+###----- IONS -----###
+for ion in cfg.chemistry.ion:
+    n_ion_column_density=cd_2d.column_density_ion(ion=ion)
+    plotter.plot_xy(column_density_values=n_ion_column_density.to("1/cm**2").value,#it is already ensures that is is in the correct units
+                    ion=ion,
+                    log_scale=True, 
+                    )
+    
+
+    ion_cddf,ion_bin_centers,ion_bin_width=cd_2d.column_density_distribution_function(
+                                                            ion=ion,
+                                                            log_column_density_range=None, #if None it selects the complete range
+                                                            n_bins=100,
+                                                            normalize=True)
+
+    plotter.plot_cddf_hist(
+                        cddf=ion_cddf,
+                        bin_centers=ion_bin_centers,
+                        bin_width=ion_bin_width,
+                        ion=ion,
+                        range_plot=None, #range of the log bins
+                        )
 
 
 

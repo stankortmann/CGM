@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm, Normalize
-
+from pathlib import Path
 
 class temperature_density_plotter:
     def __init__(self, density_edges,temperature_edges):
@@ -44,102 +44,95 @@ class temperature_density_plotter:
         plt.close()
         return
 
+from pathlib import Path
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+
+
 class column_density_plotter:
-    def __init__(self, x_edges,y_edges):
+
+    def __init__(self, x_edges, y_edges,data_unpacker,length_unit="Mpc"):
         self.xedges = x_edges
         self.yedges = y_edges
-        self.redges = None
+        self.length_unit=length_unit
+        self.output_dir = Path(data_unpacker.output_directory)
 
-    def plot_xy(self,
-                column_density_values,
-                column_density_unit,
-                title=None, 
-                log_scale=True,
-                output_path="column_density_plot.png"
-                ):
+    
 
-        fig, ax = plt.subplots(figsize=(7,6))
+    def _resolve_name(self, ion=None, element=None):
+        if ion is not None:
+            return ion
+        if element is not None:
+            return element
+        raise ValueError("Either ion or element must be provided.")
 
-        # Plot
+
+    def plot_xy(
+        self,
+        column_density_values,
+        ion=None,
+        element=None,
+        log_scale=True,
+    ):
+
+        name = self._resolve_name(ion, element)
+
+        fig, ax = plt.subplots(figsize=(7, 6))
+
+        norm = LogNorm() if log_scale else None
+
         mesh = ax.pcolormesh(
             self.xedges,
             self.yedges,
-            column_density_values.T,                # transpose is required for correct orientation
-            norm=LogNorm(),      # log colour scale (important!)
-            shading="auto"
+            column_density_values.T,
+            norm=norm,
+            shading="auto",
         )
 
-        ax.set_xlabel(r"x [Mpc]")
-        ax.set_ylabel(r"y [Mpc]")
+        ax.set_xlabel(rf"x [{self.length_unit}]")
+        ax.set_ylabel(rf"y [{self.length_unit}]")
+        ax.set_title(f"Column density of {name} in x-y plane")
 
         cbar = plt.colorbar(mesh, ax=ax)
-        cbar.set_label(column_density_unit)
+        cbar.set_label(rf"$n_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
 
         plt.tight_layout()
-        fig.savefig(output_path, dpi=300, bbox_inches="tight")
+
+        file_path = self.output_dir / f"column_density_{name}.png"
+        plt.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close()
-        return
 
-    def plot_r(self,
-            column_density_values,
-            column_density_unit,
-            title=None,
-            log_scale=False,
-            output_path="column_density_plot.png",
-            redges=None
-            ): 
-
-        fig, ax = plt.subplots(figsize=(7,6))
-
-        # Plot
-        mesh = ax.pcolormesh(
-            self.xedges,
-            self.yedges,
-            density_values.T,                # transpose is required for correct orientation
-            norm=LogNorm(),      # log colour scale (important!)
-            shading="auto"
-        )
-
-        ax.set_ylabel(r"Log temperature $[K]$")
-        ax.set_xlabel(r"Log $n_H/[cm^{-3}]$")
-
-        cbar = plt.colorbar(mesh, ax=ax)
-        cbar.set_label(density_unit)
-
-        plt.tight_layout()
-        fig.savefig(output_path, dpi=300, bbox_inches="tight")
-        plt.close()
-        return
+        print("Finished", file_path)
 
 
-    def plot_cddf_hist(self,
-                       cddf,
-                       log_bins,
-                       ion=None,
-                       element=None,
-                       normalize=True,
-                       range_plot=None,
-                       output_path=None):
-        
-        plt.figure()
-        
-        
+    def plot_cddf_hist(
+        self,
+        cddf,
+        bin_centers,
+        bin_width,
+        ion=None,
+        element=None,
+        range_plot=None,
+    ):
 
-        plt.hist(cddf, bins=log_bins,density=normalize)
-        
+        name = self._resolve_name(ion, element)
+
+        plt.figure(figsize=(7, 6))
+
+        plt.bar(bin_centers, cddf, width=bin_width)
+
         plt.ylabel("CDDF")
-        if element != None:
-            plt.title("CDDF of %s"%element)
-            plt.xlabel(r"$log_{10}(N_{%s} [cm^{-2}])$"%element)
-            
-        if ion != None:
-            plt.title("CDDF of %s"%ion)
-            plt.xlabel(r"$log_{10}(N_{%s} [cm^{-2}])$"%ion)
+        plt.xlabel(rf"$\log_{{10}}(N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}])$")
 
-        if range_plot != None:
-            plt.xlim(left=range_plot[0],right=range_plot[1])
+        plt.title(f"CDDF of {name}")
 
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        if range_plot is not None:
+            plt.xlim(range_plot[0], range_plot[1])
+
+        plt.tight_layout()
+
+        file_path = self.output_dir / f"CDDF_{name}.png"
+        plt.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close()
-        return
 
+        print("Finished", file_path)

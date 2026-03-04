@@ -29,11 +29,13 @@ class Window:
 
 @dataclass
 class Chemistry:
-     element: str
-     ion: str
+     element: Union[str, List[str]]
+     ion: Union[str, List[str]]
     
 @dataclass
 class Galaxy:
+     single_galaxy: bool 
+     extend: float
      selection: str
 
      

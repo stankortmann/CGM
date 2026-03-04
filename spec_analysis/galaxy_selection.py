@@ -1,60 +1,115 @@
+import numpy as np
+
+
+class gas_properties:
+    pass
+
+
+class element_properties:
+    pass
+
+
 class single_galaxy:
 
-    def __init__(self,cfg,halo_properties, gas_in_halo_properties):
-        
-        #properties of the halo as a whole
-        self.halo_properties=halo_properties
-        #properties of bound gas particles in halos
-        self.gas_in_halo_properties=gas_in_halo_properties
-        self.cfg=cfg
-        if cfg.galaxy.selection == "most_bound_particles":
-            self._most_bound_particles() 
+    def __init__(self, cfg, halo_properties, gas_in_halo_properties):
 
-        if cfg.galaxy.selection == "highest_gas_mass":
-            self._highest_gas_mass_halo()   
+        self.halo_properties = halo_properties
+        self.gas_in_halo_properties = gas_in_halo_properties
+        self.cfg = cfg
 
-    def _retrieve_bound_gas_particles(self):
-        
-        gas_particles_in_halo_mask=(self.gas_in_halo_properties.halo_catalogue_index==self.halo_catalogue_id)
-        self.gas=self.gas_in_halo_properties[gas_particles_in_halo]
-        
-        return 
+        # Selection is now lazy
+        self._catalogue_id = None
+        self._halo_mask = None
+        self._gas_mask = None
 
-    def _retrieve_halo(self,index):
-        #for now we use input halos, we can introduce a new flag to take another
-        #soap fied: inclusive/exclusive_sphere_xxKpc
-        self.catalogue_id=self.halo_properties.input_halos.halo_catalogue_index[index]
-        self.centre=self.halo_properties.input_halos.halo_centre[index]
-        self.half_mass_radius_gas=self.halo_properties.bound_subhalo.half_mass_radius_gas[index]
+    # ==========================================================
+    # Selection Logic
+    # ==========================================================
 
-        return 
+    @property
+    def catalogue_id(self):
+        if self._catalogue_id is None:
+            self._select_halo()
+        return self._catalogue_id
 
-    def _most_bound_particles(self):
+    # ----------------------------------------------------------
 
-        bound_particles=self.halo_properties.input_halos.number_of_bound_particles
-        most_bound_particles=np.max(bound_particles)
-        most_bound_index=np.where(bound_particles==most_bound_particles)[0]
-        
-        #get halo info
-        self._retrieve_halo(index=most_bound_index)
-        
-        #now retrieve the bound gas particles
-        self._retrieve_bound_gas_particles()
+    def _select_halo(self):
 
-        return 
+        if self.cfg.galaxy.selection == "most_bound_particles":
+            bound = self.halo_properties.input_halos.number_of_bound_particles
+            idx = np.argmax(bound)
 
-    def _highest_gas_mass_halo(self):
+        elif self.cfg.galaxy.selection == "highest_gas_mass":
+            gas_mass = self.halo_properties.bound_subhalo.gas_mass
+            idx = np.argmax(gas_mass)
 
-        gas_mass_halos=self.halo_properties.bound_subhalo.gas_mass
-        most_massive_halo=np.max(gas_mass_halos)
-        most_gas_index=np.where(bound_particles==max_bound_particles)[0]
-        
-        #get halo info
-        self._retrieve_halo(index=most_gas_index)
-        
-        #now retrieve the bound gas particles
-        self._retrieve_bound_gas_particles()
+        elif self.cfg.galaxy.selection == "random":
+            total = len(self.halo_properties.bound_subhalo.gas_mass)
+            idx = np.random.randint(0, total)
 
-        return
+        else:
+            raise ValueError("Unknown selection mode")
+
+        self._retrieve_halo(idx)
+
+    # ==========================================================
+    # Halo Properties (lazy)
+    # ==========================================================
+
+    def _retrieve_halo(self, index):
+
+        self._catalogue_id = self.halo_properties.input_halos.halo_catalogue_index[index]
+
+        mask = (
+            self.halo_properties.input_halos.halo_catalogue_index
+            == self._catalogue_id
+        )
+
+        inclusive = self.halo_properties.inclusive_sphere_50kpc
+
+        self.position = self.halo_properties.input_halos.halo_centre[mask]
+        self.stellar_mass = inclusive.stellar_mass[mask]
+        self.half_mass_radius_gas = inclusive.half_mass_radius_gas[mask]
+
+        self._halo_mask = mask
+
+   
+
+    @property
+    def gas(self):
+        if not hasattr(self, "_gas"):
+            self._retrieve_bound_gas_particles()
+        return self._gas
 
     
+
+    def _retrieve_bound_gas_particles(self):
+
+        if self._catalogue_id is None:
+            self._select_halo()
+
+        mask = (
+            self.gas_in_halo_properties.halo_catalogue_index
+            == self._catalogue_id
+        )
+
+        gas = self.gas_in_halo_properties
+
+        g = gas_properties()
+        g.temperatures = gas.temperatures[mask]
+        g.metal_mass_fractions = gas.metal_mass_fractions[mask]
+        g.densities = gas.densities[mask]
+        g.masses = gas.masses[mask]
+        g.coordinates = gas.coordinates[mask]
+
+        # ---- element fractions ----
+        elem = element_properties()
+
+        for element in gas.element_mass_fractions.named_columns:
+            arr = getattr(gas.element_mass_fractions, element)
+            setattr(elem, element, arr[mask])
+
+        g.element_mass_fractions = elem
+
+        self._gas = g
