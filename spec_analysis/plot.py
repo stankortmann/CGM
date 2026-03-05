@@ -136,3 +136,62 @@ class column_density_plotter:
         plt.close()
 
         print("Finished", file_path)
+    
+    def plot_transverse(
+        self,
+        column_density_values,
+        r_centers,
+        r_widths,
+        ion=None,
+        element=None,
+        log_scale=False,
+        normalize=False
+    ):
+        """
+        Plot 1D radial transverse column density profile.
+
+        Parameters
+        ----------
+        column_density_values : array
+            Column density profile (already in 1/cm^2, passed as values).
+        r_centers : array
+            Radial bin centers (with length unit already applied).
+        r_err : array (optional)
+            Error bars in radius (half bin width etc.).
+        """
+
+        name = self._resolve_name(ion, element)
+
+        fig, ax = plt.subplots(figsize=(7, 6))
+
+        
+        y = np.asarray(column_density_values)
+        x = np.asarray(r_centers)
+
+
+        ax.bar(
+            x,
+            y,
+            width=width,
+            align="center",
+            alpha=0.7
+        )
+
+        ax.set_xlabel(rf"Radius [{self.length_unit}]")
+        
+        ax.set_ylabel(rf"$N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
+
+        ax.set_title(f"Radial transverse profile of {name}")
+
+        if log_scale:
+            ax.set_yscale("log")
+
+    
+
+        plt.tight_layout()
+
+        file_path = self.output_dir / f"radial_transverse_{name}.png"
+        plt.savefig(file_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        print("Finished", file_path)

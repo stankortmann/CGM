@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
 data_unpacker = unpack_data.unwrapper(cfg)
 comoving_box_size = data_unpacker.box_size.to("Mpc")
-
+cfg.galaxy.extend=cfg.galaxy.extend*u.kpc #is specified in the configuration files
 single_galaxy=gal_sel.single_galaxy(cfg=cfg,
                                 halo_properties=data_unpacker.load_halo_properties(), 
                                 gas_in_halo_properties=data_unpacker.load_gas_in_halo_properties())
@@ -61,18 +61,20 @@ single_galaxy=gal_sel.single_galaxy(cfg=cfg,
 
 gas_particles=single_galaxy.gas
 
-#init the 2d column density class
+# --- 2D COLUMN DENSITY ---  
 cd_2d=density_profiles.column_density_2d(
     cfg=cfg,
     filenames=data_unpacker,
+    length_unit="Mpc",
     gas_particles=gas_particles,
     element=cfg.chemistry.element,
     halo=single_galaxy
 )
 ### --- ELEMENT --- ####
-n_element_column_density=cd_2d.n_element_column_density
+n_element_column_density=cd_2d.element_column_density
 
 plotter = plot.column_density_plotter(x_edges=cd_2d.xedges, y_edges=cd_2d.yedges,
+                                    length_unit="Mpc",
                                      data_unpacker=data_unpacker)
 
 plotter.plot_xy(column_density_values=n_element_column_density.to("1/cm**2").value,
@@ -118,6 +120,52 @@ for ion in cfg.chemistry.ion:
                         ion=ion,
                         range_plot=None, #range of the log bins
                         )
+
+# --- TRANSVERSE DISTANCE COLUMN DENSITY --- 
+cd_transverse=density_profiles.column_density_transverse(
+    cfg=cfg,
+    filenames=data_unpacker,
+    comoving_box_size=comoving_box_size,
+    length_unit="Mpc",
+    gas_particles=gas_particles,
+    element=cfg.chemistry.element,
+    halo=single_galaxy
+)
+### --- ELEMENT --- ####
+
+
+element_column_density=cd_transverse.radial_column_density_profile(
+                                    ion=None, #so element is chosen
+                                    r_max=100*u.kpc,
+                                    n_bins=50,
+                                    log_bins=False)
+
+plotter.plot_transverse(
+                column_density_values=element_column_density.to("1/cm**2").value,#it is already ensures that is is in the correct units
+                r_centers=centers,
+                r_widths=widths,
+                element=cfg.chemistry.element,
+                log_scale=False
+                )
+   
+
+
+
+###----- IONS -----###
+for ion in cfg.chemistry.ion:
+    centers,widths,column_density=cd_transverse.radial_column_density_profile(
+                                    ion=None, #so element is chosen
+                                    r_max=100*u.kpc,
+                                    n_bins=50,
+                                    log_bins=False
+                                    )
+    plotter.plot_transverse(
+                    column_density_values=column_density.to("1/cm**2").value,#it is already ensures that is is in the correct units
+                    r_centers=centers,
+                    r_widths=widths,
+                    ion=ion,
+                    log_scale=False
+                    )
 
 
 

@@ -1,14 +1,13 @@
 import numpy as np
 import unyt as u
 from functools import cached_property
+from fast_histogram import histogram2d
 
 #own modules
 from spec_analysis import chemistry as chem
 from spec_analysis import plot
 
-from functools import cached_property
-import numpy as np
-import unyt as u
+
 
 
 class column_density_2d:
@@ -38,14 +37,31 @@ class column_density_2d:
         ).to("1/cm**3")
 
     @cached_property
+    def log_n_H_cm3(self):
+        return np.log10(self.n_H_cm3.value)
+
+    @cached_property
     def temperatures(self):
         return self.gas_particles.temperatures.to_physical()
+
+    @cached_property
+    def log_T(self):
+        return np.log10(self.temperatures.value)
 
     @cached_property
     def metallicities(self):
         solar_metallicity = 0.0129
         Z = self.gas_particles.metal_mass_fractions.to_physical().value
         return Z / solar_metallicity
+
+    @cached_property
+    def log_Z(self):
+        log_Z=np.log10(
+                self.metallicities,
+                where=self.metallicities > 0,
+                out=np.full_like(self.metallicities, -40.0)
+                )
+        return log_Z
 
     @cached_property
     def positions(self):
@@ -73,36 +89,39 @@ class column_density_2d:
     def histogram_data(self):
         x = self.positions[:, 0].value
         y = self.positions[:, 1].value
-
-        hist, xedges, yedges = np.histogram2d(
+        xrange=self.histogram_range[0]
+        yrange=self.histogram_range[1]
+        hist=histogram2d(
             x=x,
             y=y,
-            bins=(self.cfg.window.resolution,
-                self.cfg.window.resolution),
+            bins=[self.cfg.window.resolution,
+                self.cfg.window.resolution],
             range=self.histogram_range,
         )
 
-        return hist, xedges, yedges
+        return hist, xrange, yrange
     
     @cached_property
     def xedges(self):
-        return self.histogram_data[1]
+        xmin=self.histogram_data[1][0]
+        xmax=self.histogram_data[1][1]
+        xedges=np.linspace(xmin,xmax,self.cfg.window.resolution+1)
+        return xedges
 
 
     @cached_property
     def yedges(self):
-        return self.histogram_data[2]
+        ymin=self.histogram_data[2][0]
+        ymax=self.histogram_data[2][1]
+        yedges=np.linspace(ymin,ymax,self.cfg.window.resolution+1)
+        return yedges
 
     
     @cached_property
     def pixel_area(self):
         dx = self.xedges[1] - self.xedges[0]
         dy = self.yedges[1] - self.yedges[0]
-
-        unit_x = self.positions.unit[0]
-        unit_y = self.positions.unit[1]
-
-        return dx * dy * unit_x * unit_y
+        return dx * dy * u.Unit(self.length_unit)**2
 
     @cached_property
     def n_element(self):
@@ -124,11 +143,11 @@ class column_density_2d:
         x = self.positions[:, 0].value
         y = self.positions[:, 1].value
 
-        hist, _, _ = np.histogram2d(
+        hist= histogram2d(
             x=x,
             y=y,
-            bins=(self.cfg.window.resolution,
-                  self.cfg.window.resolution),
+            bins=[self.cfg.window.resolution,
+                  self.cfg.window.resolution],
             range=self.histogram_range,
             weights=self.n_element
         )
@@ -141,13 +160,9 @@ class column_density_2d:
 
         log_frac = self.chimes.extract_ion_abundance(
             ion=ion,
-            log_Z=np.log10(
-                self.metallicities,
-                where=self.metallicities > 0,
-                out=np.full_like(self.metallicities, -40.0)
-            ),
-            log_T=np.log10(self.temperatures),
-            log_n_H_cm3=np.log10(self.n_H_cm3),
+            log_Z=self.log_Z,
+            log_T=self.log_T,
+            log_n_H_cm3=self.log_n_H_cm3,
         )
 
         n_ion = self.n_element * 10**log_frac
@@ -155,11 +170,11 @@ class column_density_2d:
         x = self.positions[:, 0].value
         y = self.positions[:, 1].value
 
-        hist, _, _ = np.histogram2d(
+        hist=histogram2d(
             x=x,
             y=y,
-            bins=(self.cfg.window.resolution,
-                  self.cfg.window.resolution),
+            bins=[self.cfg.window.resolution,
+                  self.cfg.window.resolution],
             range=self.histogram_range,
             weights=n_ion
         )
@@ -206,7 +221,7 @@ class column_density_2d:
         return hist, centers, dlog
 
 
-class column_density_1d:
+class column_density_transverse:
     """
     Computes radial (transverse) column density profiles
     for elements and ions relative to a halo centre.
@@ -214,9 +229,10 @@ class column_density_1d:
     Designed for SWIFT + CHIMES workflows.
     """
 
-    def __init__(self, cfg, length_unit, filenames, gas_particles, element, halo=None):
+    def __init__(self, cfg, length_unit, filenames, comoving_box_size, gas_particles, element, halo=None):
         self.cfg = cfg
         self.gas_particles = gas_particles
+        self.box_size=comoving_box_size.to_physical() #we want proper distances
         self.element = element
         self.halo = halo
         self.length_unit=length_unit
@@ -235,14 +251,32 @@ class column_density_1d:
         ).to("1/cm**3")
 
     @cached_property
+    def log_n_H_cm3(self):
+        return np.log10(self.n_H_cm3.value)
+
+    @cached_property
     def temperatures(self):
         return self.gas_particles.temperatures.to_physical()
+
+    @cached_property
+    def log_T(self):
+        return np.log10(self.temperatures.value)
 
     @cached_property
     def metallicities(self):
         solar_metallicity = 0.0129
         Z = self.gas_particles.metal_mass_fractions.to_physical().value
         return Z / solar_metallicity
+
+    @cached_property
+    def log_Z(self):
+        log_Z=np.log10(
+                self.metallicities,
+                where=self.metallicities > 0,
+                out=np.full_like(self.metallicities, -40.0)
+                )
+        return log_Z
+
 
     @cached_property
     def positions(self):
@@ -257,8 +291,8 @@ class column_density_1d:
         if self.halo is None:
             raise ValueError("Halo must be provided for radial profiles.")
 
-        x0 = self.halo.position[:, 0].to(self.length_unit).to_physical().value
-        y0 = self.halo.position[:, 1].to(self.length_unit).to_physical().value
+        x0 = self.halo.position[:, 0].to(self.length_unit).to_physical()
+        y0 = self.halo.position[:, 1].to(self.length_unit).to_physical()
         return x0, y0
 
     @cached_property
@@ -267,17 +301,21 @@ class column_density_1d:
         Projected (x-y plane) distance from halo centre.
         Returns unyt array in Mpc.
         """
-        x = self.positions[:, 0].value
-        y = self.positions[:, 1].value
+        
+        x = self.positions[:, 0]
+        y = self.positions[:, 1]
 
         x0, y0 = self.halo_center
 
         dx = x - x0
         dy = y - y0
+        #minimal image convention!
+        dx -= self.box_size * np.round(dx / self.box_size)
+        dy -= self.box_size * np.round(dy / self.box_size)
 
         r = np.sqrt(dx**2 + dy**2)
 
-        return r * u.Mpc
+        return r.to(self.length_unit) 
 
     # ==========================================================
     # Element properties
@@ -306,13 +344,9 @@ class column_density_1d:
 
         log_frac = self.chimes.extract_ion_abundance(
             ion=ion,
-            log_Z=np.log10(
-                self.metallicities,
-                where=self.metallicities > 0,
-                out=np.full_like(self.metallicities, -40.0)
-            ),
-            log_T=np.log10(self.temperatures),
-            log_n_H_cm3=np.log10(self.n_H_cm3),
+            log_Z=self.log_Z,
+            log_T=self.log_T,
+            log_n_H_cm3=self.log_n_H_cm3,
         )
 
         return self.n_element * 10**log_frac
@@ -324,7 +358,7 @@ class column_density_1d:
     def radial_column_density_profile(
         self,
         ion=None,
-        r_max=500*u.kpc,        #Kpc proper length
+        r_max=100*u.kpc,        #kpc proper length
         n_bins=50,
         log_bins=False
     ):
@@ -359,16 +393,16 @@ class column_density_1d:
         # Annulus area
         r_outer = edges[1:]
         r_inner = edges[:-1]
-
+        r_widths= r_outer-r_inner
         area = np.pi * (r_outer**2 - r_inner**2)
-        area = area * (self.length_unit**2)
+        area = area * u.Unit(self.length_unit)**2
 
         column_density = counts / area
         column_density = column_density.to("1/cm**2")
 
-        r_centers = 0.5 * (r_outer + r_inner)
+        r_centers = 0.5 * (r_outer + r_inner)*self.length_unit
 
-        return r_centers, column_density
+        return r_centers, r_widths, column_density
 
     # ==========================================================
     # Radial Column Density Distribution Function
@@ -400,10 +434,10 @@ class column_density_1d:
             density=normalize
         )
 
-        dlog = edges[1] - edges[0]
+        dbin = edges[1] - edges[0]
         centers = 0.5 * (edges[1:] + edges[:-1])
 
-        return hist, centers, dlog
+        return hist, centers, dbin
 
 
 
