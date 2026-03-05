@@ -14,7 +14,8 @@ data_output:
 window:
     x: [0.0, 1.0]
     y: [0.0, 1.0]
-    z: [0.0, 1.0]
+    z: [0.0, 0.2]
+    projection_axis: z
     resolution: 1000 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
 
 chemistry:

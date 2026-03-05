@@ -113,6 +113,7 @@ class column_density_plotter:
         ion=None,
         element=None,
         range_plot=None,
+        log_scale=True
     ):
 
         name = self._resolve_name(ion, element)
@@ -130,6 +131,9 @@ class column_density_plotter:
             plt.xlim(range_plot[0], range_plot[1])
 
         plt.tight_layout()
+
+        if log_scale:
+            plt.yscale("log")
 
         file_path = self.output_dir / f"CDDF_{name}.png"
         plt.savefig(file_path, dpi=300, bbox_inches="tight")

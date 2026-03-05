@@ -25,6 +25,7 @@ class Window:
     x: List[float]
     y: List[float]
     z: List[float]
+    projection_axis: str
     resolution: int
 
 @dataclass

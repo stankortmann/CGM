@@ -59,6 +59,13 @@ cfg.galaxy.extend=cfg.galaxy.extend*u.kpc
 dx=(cfg.window.x[1]-cfg.window.x[0])/cfg.window.resolution
 dy=(cfg.window.y[1]-cfg.window.y[0])/cfg.window.resolution
 dz=(cfg.window.z[1]-cfg.window.z[0])/cfg.window.resolution
+#added the projection axis length for a full simulations slice
+proj_axis={"x":cfg.window.x,
+        "y":cfg.window.y,
+        "z":cfg.window.z}
+proj_range=proj_axis[cfg.window.projection_axis]
+
+
 
 region = [
         cfg.window.x,
@@ -95,13 +102,14 @@ plotter.plot_xy(column_density_values=n_element_column_density.to("1/cm**2").val
 element_cddf,element_bin_centers,element_bin_width=cd_2d.column_density_distribution_function(ion=None,
                                                         log_column_density_range=None,
                                                         n_bins=100,
-                                                        normalize=True)
+                                                        los_range=proj_range)
 
 plotter.plot_cddf_hist(
                        cddf=element_cddf,
                        bin_centers=element_bin_centers,
                        bin_width=element_bin_width,
                        element=cfg.chemistry.element,
+                       log_scale=True
                        )
    
 
@@ -120,7 +128,9 @@ for ion in cfg.chemistry.ion:
                                                             ion=ion,
                                                             log_column_density_range=None, #if None it selects the complete range
                                                             n_bins=100,
-                                                            normalize=True)
+                                                            los_range=proj_range
+                                                            )                                       
+                                                            
 
     plotter.plot_cddf_hist(
                         cddf=ion_cddf,
@@ -128,6 +138,7 @@ for ion in cfg.chemistry.ion:
                         bin_width=ion_bin_width,
                         ion=ion,
                         range_plot=None, #range of the log bins
+                        log_scale=True
                         )
    
 

@@ -2,6 +2,7 @@ import numpy as np
 import unyt as u
 from functools import cached_property
 from fast_histogram import histogram2d
+from swiftsimio.visualisation.projection import project_gas
 
 #own modules
 from spec_analysis import chemistry as chem
@@ -87,32 +88,23 @@ class column_density_2d:
 
     @cached_property
     def histogram_data(self):
-        x = self.positions[:, 0].value
-        y = self.positions[:, 1].value
         xrange=self.histogram_range[0]
         yrange=self.histogram_range[1]
-        hist=histogram2d(
-            x=x,
-            y=y,
-            bins=[self.cfg.window.resolution,
-                self.cfg.window.resolution],
-            range=self.histogram_range,
-        )
 
-        return hist, xrange, yrange
+        return xrange, yrange
     
     @cached_property
     def xedges(self):
-        xmin=self.histogram_data[1][0]
-        xmax=self.histogram_data[1][1]
+        xmin=self.histogram_data[0][0]
+        xmax=self.histogram_data[0][1]
         xedges=np.linspace(xmin,xmax,self.cfg.window.resolution+1)
         return xedges
 
 
     @cached_property
     def yedges(self):
-        ymin=self.histogram_data[2][0]
-        ymax=self.histogram_data[2][1]
+        ymin=self.histogram_data[1][0]
+        ymax=self.histogram_data[1][1]
         yedges=np.linspace(ymin,ymax,self.cfg.window.resolution+1)
         return yedges
 
@@ -188,8 +180,8 @@ class column_density_2d:
         ion=None,
         log_column_density_range=None,
         n_bins=100,
-        normalize=True
-    ):
+        los_range=[0,1], #projection axis length, still comoving
+        ):
 
         if ion is None:
             cd = self.element_column_density
@@ -199,8 +191,13 @@ class column_density_2d:
         
         values = cd.to("1/cm**2").value.flatten()
         values = values[values > 0]
+        #valid sightlines
 
         log_values = np.log10(values)
+
+        #for now it is simple but this has to become a function to 
+        #calculate line of sight range
+        los_distance=(los_range[1]-los_range[0]).to("cm").to_physical().value
 
         if log_column_density_range is None:
             log_column_density_range = [
@@ -211,14 +208,207 @@ class column_density_2d:
         hist, edges = np.histogram(
             log_values,
             bins=n_bins,
-            range=log_column_density_range,
-            density=normalize
+            range=log_column_density_range
         )
 
         dlog = edges[1] - edges[0]
         centers = 0.5 * (edges[1:] + edges[:-1])
+        #f(N)=d^2(N)/dlog(N)*dX, dX=los_distance
+        cddf=hist/(dlog*los_distance)
 
-        return hist, centers, dlog
+        return cddf, centers, dlog
+
+class column_density_2d_swift:
+    """
+    Computes 2D column density histograms for elements and their ions.
+    Designed for SWIFT + CHIMES workflows.
+    """
+
+    def __init__(self, cfg, snapshot, length_unit, 
+                filenames, element, halo=None):
+        self.cfg = cfg
+        self.snapshot=snapshot
+        self.gas_particles = self.snapshot.gas
+        self.element = element
+        self.halo = halo
+
+        self.chimes = chem.chimes(filenames.chimes_table_path)
+
+        self.length_unit=length_unit
+
+
+
+    @cached_property
+    def n_H_cm3(self):
+        return chem.elements.get_particle_density(
+            element="hydrogen",
+            gas_particles=self.gas_particles,
+            physical=True
+        ).to("1/cm**3")
+
+    @cached_property
+    def log_n_H_cm3(self):
+        return np.log10(self.n_H_cm3.value)
+
+    @cached_property
+    def temperatures(self):
+        return self.gas_particles.temperatures.to_physical()
+
+    @cached_property
+    def log_T(self):
+        return np.log10(self.temperatures.value)
+
+    @cached_property
+    def metallicities(self):
+        solar_metallicity = 0.0129
+        Z = self.gas_particles.metal_mass_fractions.to_physical().value
+        return Z / solar_metallicity
+
+    @cached_property
+    def log_Z(self):
+        log_Z=np.log10(
+                self.metallicities,
+                where=self.metallicities > 0,
+                out=np.full_like(self.metallicities, -40.0)
+                )
+        return log_Z
+
+    @cached_property
+    def positions(self):
+        return self.gas_particles.coordinates
+
+
+    @cached_property
+    def projection_range(self):
+        
+        #not yet redefined, we have to make a cosma_array of the 
+        #self.cfg.galaxy.single_galaxy unyt array
+        if self.cfg.galaxy.single_galaxy:
+            barrier = self.cfg.galaxy.extend.to(self.length_unit)
+            x0 = self.halo.position[:, 0]
+            y0 = self.halo.position[:, 1]
+            return [x0 - barrier, x0 + barrier,
+                    y0 - barrier, y0 + barrier]
+
+        return [self.cfg.window.x[0],
+                self.cfg.window.x[1],
+                self.cfg.window.y[0],
+                self.cfg.window.y[1]]
+
+    @cached_property
+    def xedges(self):
+        xmin=self.projection_range[0]
+        xmax=self.projection_range[1]
+        xedges=np.linspace(xmin,xmax,self.cfg.window.resolution+1)
+        return xedges
+
+
+    @cached_property
+    def yedges(self):
+        ymin=self.projection_range[2]
+        ymax=self.projection_range[3]
+        yedges=np.linspace(ymin,ymax,self.cfg.window.resolution+1)
+        return yedges
+
+    @cached_property
+    def n_element(self):
+        return chem.elements.get_particle_number(
+            self.element,
+            self.gas_particles
+        ).value
+
+    @cached_property
+    def n_element_cm3(self):
+        return chem.elements.get_particle_density(
+            element=self.element,
+            gas_particles=self.gas_particles,
+            physical=True
+        ).to("1/cm**3")
+
+    @cached_property
+    def element_column_density(self):
+        self.gas_particles.element_number=self.n_element
+        projection = project_gas(
+            data=self.snapshot,
+            project="element_number",
+            resolution=self.cfg.window.resolution,
+            region=self.projection_region,
+            periodic=True,
+        )
+       
+        return projection.to("1/cm**2")
+
+
+    def column_density_ion(self, ion):
+
+        log_frac = self.chimes.extract_ion_abundance(
+            ion=ion,
+            log_Z=self.log_Z,
+            log_T=self.log_T,
+            log_n_H_cm3=self.log_n_H_cm3,
+        )
+
+        n_ion = self.n_element * 10**log_frac
+
+        name_ion = f"{ion}_number"
+
+        setattr(
+            self.gas_particles,
+            name_ion,
+            n_ion
+        )
+        projection = project_gas(
+            data=self.snapshot,
+            project=name_ion,
+            resolution=self.cfg.window.resolution,
+            region=self.projection_region,
+            periodic=True,
+        )
+       
+        return projection.to("1/cm**2")
+    
+    def column_density_distribution_function(
+        self,
+        ion=None,
+        log_column_density_range=None,
+        n_bins=100,
+        los_range=[0,1], #projection axis length, still comoving
+        ):
+
+        if ion is None:
+            cd = self.element_column_density
+        else:
+            cd = self.column_density_ion(ion)
+        
+        
+        values = cd.to("1/cm**2").value.flatten()
+        values = values[values > 0]
+        #valid sightlines
+
+        log_values = np.log10(values)
+
+        #for now it is simple but this has to become a function to 
+        #calculate line of sight range
+        los_distance=(los_range[1]-los_range[0]).to("cm").to_physical().value
+
+        if log_column_density_range is None:
+            log_column_density_range = [
+                log_values.min(),
+                log_values.max()
+            ]
+
+        hist, edges = np.histogram(
+            log_values,
+            bins=n_bins,
+            range=log_column_density_range
+        )
+
+        dlog = edges[1] - edges[0]
+        centers = 0.5 * (edges[1:] + edges[:-1])
+        #f(N)=d^2(N)/dlog(N)*dX, dX=los_distance
+        cddf=hist/(dlog*los_distance)
+
+        return cddf, centers, dlog
 
 
 class column_density_transverse:
@@ -384,7 +574,7 @@ class column_density_transverse:
         else:
             bins = np.linspace(0, r_max, n_bins + 1)
 
-        counts, edges = np.histogram(
+        particles, edges = np.histogram(
             r,
             bins=bins,
             weights=weights
@@ -397,7 +587,7 @@ class column_density_transverse:
         area = np.pi * (r_outer**2 - r_inner**2)
         area = area * u.Unit(self.length_unit)**2
 
-        column_density = counts / area
+        column_density = particles / area
         column_density = column_density.to("1/cm**2")
 
         r_centers = 0.5 * (r_outer + r_inner)*self.length_unit

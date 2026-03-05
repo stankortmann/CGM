@@ -21,8 +21,8 @@ mask = sw.mask(snapshot_path)
 # The full metadata object is available from within the mask
 b = mask.metadata.boxsize #boxsize
 # load_region is a 3x2 list [[left, right], [bottom, top], [front, back]]
-zmin = 0.6 * b[2]
-zmax = 0.9 * b[2]
+zmin = 0.1 * b[2]
+zmax = 0.13 * b[2]
 #load_region = [[0.0 * b, 0.5 * b] for b in boxsize]
 load_region = [
         [0.0 * b[0], 1.0 * b[0]],
@@ -38,10 +38,8 @@ mask.constrain_spatial(load_region)
 # Now load the snapshot with this mask
 snapshot = load(snapshot_path, mask=mask)
 
+snapshot.gas.masses =snapshot.gas.masses.to_physical()
 
-
-print(np.shape(snapshot.gas.densities))
-print((snapshot.gas.densities[0:5]))
 
 catalog=load(soap_hbt_path)
 positions_haloes=catalog.inclusive_sphere_50kpc.centre_of_mass
@@ -56,6 +54,7 @@ surface_density = project_gas(
     project="masses",
     periodic=True
 )
+print(surface_density[0:5,0])
 
 ###### without haloes ######
 plt.figure(figsize=(8,8))
