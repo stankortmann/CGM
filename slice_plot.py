@@ -13,13 +13,14 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
 # Load snapshot
-snapshot_path = "/cosma8/data/dp004/colibre/Runs/L012_m6/Thermal/snapshots/colibre_0127/colibre_0127.hdf5"
+snapshot_path = "/cosma8/data/dp004/colibre/Runs/L012_m7/Thermal/snapshots/colibre_0127/colibre_0127.hdf5"
 #snapshot_path="/cosma8/data/dp004/flamingo/Runs/L1000N0900/HYDRO_FIDUCIAL/snapshots/flamingo_0000/flamingo_0000.0.hdf5"
 soap_hbt_path="/cosma8/data/dp004/colibre/Runs/L012_m6/Thermal/SOAP-HBT/halo_properties_0127.hdf5"
 
 mask = sw.mask(snapshot_path)
 # The full metadata object is available from within the mask
 b = mask.metadata.boxsize #boxsize
+
 # load_region is a 3x2 list [[left, right], [bottom, top], [front, back]]
 zmin = 0.1 * b[2]
 zmax = 0.13 * b[2]
@@ -33,29 +34,41 @@ load_region = [
 # Constrain the mask
 mask.constrain_spatial(load_region)
 
+from swiftsimio.objects import cosmo_array, cosmo_factor
+import unyt as u
 
 
 # Now load the snapshot with this mask
 snapshot = load(snapshot_path, mask=mask)
 
+
 snapshot.gas.masses =snapshot.gas.masses.to_physical()
+snapshot.gas.masses = cosmo_array(
+    snapshot.gas.masses.value,
+    None,
+    comoving=True,
+    scale_factor=snapshot.metadata.scale_factor,  # a=0.5, i.e. z=1
+    scale_exponent=0,  # distances scale as a**1, so the scale exponent is 1
+)
 
 
-catalog=load(soap_hbt_path)
-positions_haloes=catalog.inclusive_sphere_50kpc.centre_of_mass
+#catalog=load(soap_hbt_path)
+#positions_haloes=catalog.inclusive_sphere_50kpc.centre_of_mass
 #making the same cut in z as for the snapshot
-positions_haloes=positions_haloes[(positions_haloes[:,2]>zmin) & (positions_haloes[:,2]<zmax)]
+#positions_haloes=positions_haloes[(positions_haloes[:,2]>zmin) & (positions_haloes[:,2]<zmax)]
 
 # Project density (mass) along one axis (say z→ surface density on x-y)
 surface_density = project_gas(
     snapshot,
-    resolution=int(b.value[0])*50,
+    resolution=200,
     
     project="masses",
     periodic=True
 )
 print(surface_density[0:5,0])
 
+
+"""
 ###### without haloes ######
 plt.figure(figsize=(8,8))
 plt.imshow(
@@ -110,4 +123,4 @@ plt.tight_layout()
 plt.savefig("test_colibre/only_haloes.png", dpi=300)
 print("done only haloes")
 plt.close()
-
+"""

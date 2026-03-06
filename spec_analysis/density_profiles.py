@@ -3,6 +3,7 @@ import unyt as u
 from functools import cached_property
 from fast_histogram import histogram2d
 from swiftsimio.visualisation.projection import project_gas
+from swiftsimio.objects import cosmo_array, cosmo_factor
 
 #own modules
 from spec_analysis import chemistry as chem
@@ -273,10 +274,6 @@ class column_density_2d_swift:
                 )
         return log_Z
 
-    @cached_property
-    def positions(self):
-        return self.gas_particles.coordinates
-
 
     @cached_property
     def projection_range(self):
@@ -289,18 +286,24 @@ class column_density_2d_swift:
             y0 = self.halo.position[:, 1]
             return [x0 - barrier, x0 + barrier,
                     y0 - barrier, y0 + barrier]
-
-        return [self.cfg.window.x[0],
-                self.cfg.window.x[1],
-                self.cfg.window.y[0],
-                self.cfg.window.y[1]]
+        else:
+            return [self.cfg.window.x[0],
+                    self.cfg.window.x[1],
+                    self.cfg.window.y[0],
+                    self.cfg.window.y[1]]
 
     @cached_property
     def xedges(self):
         xmin=self.projection_range[0]
         xmax=self.projection_range[1]
         xedges=np.linspace(xmin,xmax,self.cfg.window.resolution+1)
-        return xedges
+        xedges_cosmo_array=cosmo_array(xedges,
+                                        u.Mpc,
+                                        comoving=True,
+                                        scale_factor=self.snapshot.metadata.scale_factor,  # a=0.5, i.e. z=1
+                                        scale_exponent=1,  # distances scale as a**1, so the scale exponent is 1
+                                        )
+        return xedges_cosmo_array
 
 
     @cached_property
@@ -308,34 +311,46 @@ class column_density_2d_swift:
         ymin=self.projection_range[2]
         ymax=self.projection_range[3]
         yedges=np.linspace(ymin,ymax,self.cfg.window.resolution+1)
-        return yedges
+        yedges_cosmo_array=cosmo_array(yedges,
+                                        u.Mpc,
+                                        comoving=True,
+                                        scale_factor=self.snapshot.metadata.scale_factor,  # a=0.5, i.e. z=1
+                                        scale_exponent=1,  # distances scale as a**1, so the scale exponent is 1
+                                        )
+        return yedges_cosmo_array
 
     @cached_property
     def n_element(self):
-        return chem.elements.get_particle_number(
-            self.element,
-            self.gas_particles
-        ).value
+        n_element=chem.elements.get_particle_number(self.element,self.gas_particles).value
+        
+        n_element_cosmo_array= cosmo_array(
+                                        n_element,
+                                        None,
+                                        comoving=False,
+                                        scale_factor=self.snapshot.metadata.scale_factor,  # a=0.5, i.e. z=1
+                                        scale_exponent=0,  # distances scale as a**1, so the scale exponent is 1
+                                        )
+        return n_element_cosmo_array
 
-    @cached_property
-    def n_element_cm3(self):
-        return chem.elements.get_particle_density(
-            element=self.element,
-            gas_particles=self.gas_particles,
-            physical=True
-        ).to("1/cm**3")
+    
 
     @cached_property
     def element_column_density(self):
-        self.gas_particles.element_number=self.n_element
-        projection = project_gas(
+        #ensure comoving as the snapshot data is in comoving coordinates
+        element_number=self.n_element.to_comoving() 
+        #just take the median, rescaling ensures no float overflow
+        scale=np.median(element_number).value 
+        scaled_element_number=element_number/scale
+        self.gas_particles.element_number=scaled_element_number
+        scale_projection = project_gas(
             data=self.snapshot,
             project="element_number",
             resolution=self.cfg.window.resolution,
-            region=self.projection_region,
+            region=self.projection_range,
+            parallel=True,
             periodic=True,
         )
-       
+        projection = scale_projection*scale
         return projection.to("1/cm**2")
 
 
@@ -349,22 +364,24 @@ class column_density_2d_swift:
         )
 
         n_ion = self.n_element * 10**log_frac
-
+        scale=np.median(n_ion).value
+        n_ion_scale=n_ion/scale
         name_ion = f"{ion}_number"
 
         setattr(
             self.gas_particles,
             name_ion,
-            n_ion
+            n_ion_scale
         )
-        projection = project_gas(
+        scale_projection = project_gas(
             data=self.snapshot,
             project=name_ion,
             resolution=self.cfg.window.resolution,
-            region=self.projection_region,
+            region=self.projection_range,
+            parallel=True,
             periodic=True,
         )
-       
+        projection=scale_projection*scale
         return projection.to("1/cm**2")
     
     def column_density_distribution_function(
@@ -381,7 +398,7 @@ class column_density_2d_swift:
             cd = self.column_density_ion(ion)
         
         
-        values = cd.to("1/cm**2").value.flatten()
+        values = cd.to_physical().value.flatten()
         values = values[values > 0]
         #valid sightlines
 
@@ -517,14 +534,6 @@ class column_density_transverse:
             self.element,
             self.gas_particles
         ).value
-
-    @cached_property
-    def n_element_cm3(self):
-        return chem.elements.get_particle_density(
-            element=self.element,
-            gas_particles=self.gas_particles,
-            physical=True
-        ).to("1/cm**3")
 
     # ==========================================================
     # Ion number per particle

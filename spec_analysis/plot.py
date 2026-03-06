@@ -44,9 +44,7 @@ class temperature_density_plotter:
         plt.close()
         return
 
-from pathlib import Path
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+
 
 
 class column_density_plotter:
