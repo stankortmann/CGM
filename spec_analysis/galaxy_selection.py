@@ -77,26 +77,26 @@ class single_galaxy:
         self._select_halo()
         
         # precompute indices
-        indices = np.nonzero(self.gas_in_halo_properties.halo_catalogue_index == self.catalogue_id)[0]
-        self.gas_mask = np.zeros_like(self.gas_in_halo_properties.halo_catalogue_index, dtype=bool)
+        indices = np.nonzero(self.gas.halo_catalogue_index == self.catalogue_id)[0]
+        self.gas_mask = np.zeros_like(self.gas.halo_catalogue_index, dtype=bool)
         self.gas_mask[indices] = True
 
-        gas_all = self.gas_in_halo_properties.gas
+        
         gas = gas_properties()
 
         # slice arrays using np.take
-        gas.temperatures = np.take(gas_all.temperatures, indices,axis=0)
-        gas.densities = np.take(gas_all.densities, indices,axis=0)
-        gas.masses = np.take(gas_all.masses, indices,axis=0)
-        gas.coordinates = np.take(gas_all.coordinates, indices,axis=0)
-        gas.volumes = np.take(gas_all.volumes, indices,axis=0)
-        gas.smoothing_lengths = np.take(gas_all.smoothing_lengths, indices,axis=0)
-        gas.metal_mass_fractions = np.take(gas_all.metal_mass_fractions, indices,axis=0)
+        gas.temperatures = np.take(self.gas.temperatures, indices,axis=0)
+        gas.densities = np.take(self.gas.densities, indices,axis=0)
+        gas.masses = np.take(self.gas.masses, indices,axis=0)
+        gas.coordinates = np.take(self.gas.coordinates, indices,axis=0)
+        gas.volumes = np.take(self.gas.volumes, indices,axis=0)
+        gas.smoothing_lengths = np.take(self.gas.smoothing_lengths, indices,axis=0)
+        gas.metal_mass_fractions = np.take(self.gas.metal_mass_fractions, indices,axis=0)
 
         # element fractions
         elem = element_properties()
-        for element in gas_all.element_mass_fractions.named_columns:
-            arr = getattr(gas_all.element_mass_fractions, element)
+        for element in self.gas.element_mass_fractions.named_columns:
+            arr = getattr(self.gas.element_mass_fractions, element)
             setattr(elem, element, np.take(arr, indices,axis=0))
         gas.element_mass_fractions = elem
 

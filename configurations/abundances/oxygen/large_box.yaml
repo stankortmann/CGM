@@ -24,7 +24,7 @@ chemistry:
 
 galaxy:
   #Bool to select single galaxy mode
-  single_galaxy: on
+  single_galaxy: off
   #choose: exclusive_sphere, inclusive_sphere, projected_aperture, input_halos, 
   #input_halos_hbtplus 
   #WILL ADD MORE BUT THIS WILL BE DONE LATER

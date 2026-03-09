@@ -56,7 +56,7 @@ if __name__ == "__main__":
 data_unpacker = unpack_data.unwrapper(cfg)
 comoving_box_size = data_unpacker.box_size.to("Mpc")
 cfg.window.x,cfg.window.y,cfg.window.z = [x*comoving_box_size for x in cfg.window.x], [y*comoving_box_size for y in cfg.window.y], [z*comoving_box_size for z in cfg.window.z]
-cfg.galaxy.extend=cfg.galaxy.extend*u.kpc
+
 
 dx=(cfg.window.x[1]-cfg.window.x[0])/cfg.window.resolution
 dy=(cfg.window.y[1]-cfg.window.y[0])/cfg.window.resolution
