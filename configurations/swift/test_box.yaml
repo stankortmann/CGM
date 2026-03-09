@@ -1,6 +1,6 @@
 simulation:
   main_dir: /cosma8/data/dp004/colibre/Runs #do not touch!
-  chimes_table_dir: /cosma8/data/dp004/jlvc76/COLIBRE/Tables/equilibrium_rates_and_speciesfractions/abundances_full/ #this is where the chimes tables are stored, change if necessary
+  chimes_table_dir: /cosma8/data/dp004/jlvc76/COLIBRE/Tables/chimes-data/EqAbundancesTables/colibre_HHe/ #this is where the chimes tables are stored, change if necessary
   box_length: 100 #cMpc
   resolution: 6 # 10^resolution  M_solar 
   name: Thermal
@@ -8,13 +8,13 @@ simulation:
 
 data_output:
   main_dir: /cosma8/data/do012/dc-kort1/CGM/ #this is where the I store my outputs, change if necessary
-  results_dir: test_gal 
+  results_dir: test_box_swift 
 
 
 window:
     x: [0.0, 1.0]
     y: [0.0, 1.0]
-    z: [0.0, 0.5]
+    z: [0.1, 0.3]
     projection_axis: z
     resolution: 1000 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
 
@@ -24,7 +24,7 @@ chemistry:
 
 galaxy:
   #Bool to select single galaxy mode
-  single_galaxy: on
+  single_galaxy: off
   extend: 0.5 #kpc physical, the extend of the window around the galaxy in the histograms 
   # choose: random, highest_gas_mass, most_bound_particles,
   selection: highest_gas_mass # choose: random, highest_gas_mass, most_bound_particles,

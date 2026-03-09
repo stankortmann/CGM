@@ -33,6 +33,7 @@ if __name__ == "__main__":
         help="Path to the YAML configuration file"
     )
     args=parser.parse_args()
+    print(args)
     # --- Load YAML config file ---
     with open(args.config, "r") as f:
         cfg_dict = yaml.safe_load(f)
@@ -119,6 +120,7 @@ plotter.plot_cddf_hist(
 
 ###----- IONS -----###
 for ion in cfg.chemistry.ion:
+    print("calculating for ion",ion)
     n_ion_column_density=cd_2d.column_density_ion(ion=ion)
     plotter.plot_xy(column_density_values=n_ion_column_density.to_physical().value,#it is already ensures that is is in the correct units
                     ion=ion,

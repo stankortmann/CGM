@@ -130,7 +130,7 @@ class unwrapper:
     @property
     def chimes_table_path(self) -> str:
         return str(
-            Path(self.cfg.simulation.chimes_table_dir) /
+            Path(self.cfg.simulation.chimes_table_dir) / \
             f"z{self.redshift:.3f}_eqm.hdf5"
         )
 
@@ -140,7 +140,10 @@ class unwrapper:
 
     @property
     def output_directory(self) -> str:
-        path = Path(self.cfg.data_output.main_dir)/self.cfg.data_output.results_dir
+        path = Path(self.cfg.data_output.main_dir)/ \
+          self.cfg.data_output.results_dir / \
+          f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / \
+          self.cfg.simulation.name / \
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
 

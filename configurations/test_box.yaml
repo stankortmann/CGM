@@ -1,6 +1,6 @@
 simulation:
   main_dir: /cosma8/data/dp004/colibre/Runs #do not touch!
-  chimes_table_dir: /cosma8/data/dp004/jlvc76/COLIBRE/Tables/chimes-data/EqAbundancesTables/colibre_HHe/ #this is where the chimes tables are stored, change if necessary
+  chimes_table_dir: /cosma8/data/dp004/jlvc76/COLIBRE/Tables/equilibrium_rates_and_speciesfractions/abundances_full/ #this is where the chimes tables are stored, change if necessary
   box_length: 100 #cMpc
   resolution: 6 # 10^resolution  M_solar 
   name: Thermal

@@ -363,7 +363,7 @@ class column_density_2d_swift:
             log_n_H_cm3=self.log_n_H_cm3,
         )
 
-        n_ion = self.n_element * 10**log_frac
+        n_ion = self.n_element.to_comoving() * 10**log_frac
         scale=np.median(n_ion).value
         n_ion_scale=n_ion/scale
         name_ion = f"{ion}_number"

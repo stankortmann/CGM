@@ -79,13 +79,16 @@ class column_density_plotter:
 
         norm = LogNorm() if log_scale else None
 
-        mesh = ax.pcolormesh(
-            self.xedges,
-            self.yedges,
-            column_density_values.T,
-            norm=norm,
-            shading="auto",
-        )
+        mesh = ax.imshow(
+                    column_density_values.T,
+                    origin="lower",
+                    extent=[
+                        self.xedges[0], self.xedges[-1],
+                        self.yedges[0], self.yedges[-1],
+                    ],
+                    norm=norm,
+                    aspect="auto",
+                )
 
         ax.set_xlabel(rf"x [{self.length_unit}]")
         ax.set_ylabel(rf"y [{self.length_unit}]")
@@ -120,7 +123,7 @@ class column_density_plotter:
 
         plt.bar(bin_centers, cddf, width=bin_width)
 
-        plt.ylabel("CDDF")
+        plt.ylabel(r"$\frac{d N}{d\log_{10} N\, d\ell}\,[\mathrm{cm}^{-1}]$")
         plt.xlabel(rf"$\log_{{10}}(N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}])$")
 
         plt.title(f"CDDF of {name}")
