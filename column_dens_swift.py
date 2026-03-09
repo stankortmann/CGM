@@ -120,7 +120,7 @@ plotter.plot_cddf_hist(
 
 ###----- IONS -----###
 for ion in cfg.chemistry.ion:
-    print("calculating for ion",ion)
+    print("Calculating for ion",ion)
     n_ion_column_density=cd_2d.column_density_ion(ion=ion)
     plotter.plot_xy(column_density_values=n_ion_column_density.to_physical().value,#it is already ensures that is is in the correct units
                     ion=ion,
@@ -130,6 +130,7 @@ for ion in cfg.chemistry.ion:
 
     ion_cddf,ion_bin_centers,ion_bin_width=cd_2d.column_density_distribution_function(
                                                             ion=ion,
+                                                            ion_column_density=n_ion_column_density, #avoids recomputation
                                                             log_column_density_range=None, #if None it selects the complete range
                                                             n_bins=100,
                                                             los_range=proj_range
@@ -144,7 +145,8 @@ for ion in cfg.chemistry.ion:
                         range_plot=None, #range of the log bins
                         log_scale=True
                         )
-   
+#exit the python environment
+exit()
 
 
 

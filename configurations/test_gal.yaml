@@ -14,7 +14,7 @@ data_output:
 window:
     x: [0.0, 1.0]
     y: [0.0, 1.0]
-    z: [0.0, 0.5]
+    z: [0.0, 0.2]
     projection_axis: z
     resolution: 1000 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
 
@@ -25,7 +25,12 @@ chemistry:
 galaxy:
   #Bool to select single galaxy mode
   single_galaxy: on
-  extend: 0.5 #kpc physical, the extend of the window around the galaxy in the histograms 
+  #choose: exclusive_sphere, inclusive_sphere, projected_aperture, bound_subhalo,  
+  #WILL ADD MORE BUT THIS WILL BE DONE LATER
+  galaxy_window: inclusive_sphere 
+  extend_value: 100 #kpc physical, the extend of the window around the galaxy in the histograms 
+  #choose: kpc, pc
+  extend_unit: kpc
   # choose: random, highest_gas_mass, most_bound_particles,
   selection: highest_gas_mass # choose: random, highest_gas_mass, most_bound_particles,
   

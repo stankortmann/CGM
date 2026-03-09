@@ -19,7 +19,8 @@ class unwrapper:
 
     def __init__(self, cfg):
         self.cfg = cfg
-\
+        if cfg.galaxy.single_galaxy:
+            self.halo_selection_field=self._halo_selection_field()
 
     # ==========================================================
     # Snapshot
@@ -27,12 +28,13 @@ class unwrapper:
 
     @property
     def snapshot_path(self) -> str:
-        path = Path(self.cfg.simulation.main_dir) / \
-               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / \
-               self.cfg.simulation.name / \
-               "snapshots" / \
-               f"colibre_{self.cfg.simulation.snapshot_number:04d}" / \
+        path = (Path(self.cfg.simulation.main_dir) / 
+               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / 
+               self.cfg.simulation.name / 
+               "snapshots" / 
+               f"colibre_{self.cfg.simulation.snapshot_number:04d}" / 
                f"colibre_{self.cfg.simulation.snapshot_number:04d}.hdf5"
+        )
 
         path = str(path)
 
@@ -62,16 +64,31 @@ class unwrapper:
 
     @property
     def halo_properties_path(self) -> str:
-        path = Path(self.cfg.simulation.main_dir) / \
-               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / \
-               self.cfg.simulation.name / \
-               "SOAP-HBT" / \
+        path = (Path(self.cfg.simulation.main_dir) / 
+               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / 
+               self.cfg.simulation.name / 
+               "SOAP-HBT" / 
                f"halo_properties_{self.cfg.simulation.snapshot_number:04d}.hdf5"
+        )
 
         return str(path)
 
     def load_halo_properties(self):
         return load(self.halo_properties_path)
+    
+    
+    def _halo_selection_field(self):
+        gal_window=self.cfg.galaxy.galaxy_window
+        if gal_window in ["inclusive_sphere", "exclusive_sphere"]:
+            return f"{gal_window}_{self.cfg.galaxy.extend_value}{self.cfg.galaxy.extend_unit}"
+        
+        elif gal_window in ["bound_subhalo"]:
+            return gal_window
+        
+        elif gal_window in ["projected_aperture"]:
+            return f"{gal_window}_{self.cfg.galaxy.extend_value}{self.cfg.galaxy.extend_unit}_proj{self.cfg.window.projection_axis}"
+        else:
+            raise ValueError(f"Unknown galaxy window type: {gal_window}")
 
     # ==========================================================
     # Gas in halo
@@ -79,16 +96,18 @@ class unwrapper:
 
     @property
     def gas_in_halo_properties_path(self) -> str:
-        path = Path(self.cfg.simulation.main_dir) / \
-               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / \
-               self.cfg.simulation.name / \
-               "SOAP-HBT" / \
+        path =(Path(self.cfg.simulation.main_dir) / 
+               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / 
+               self.cfg.simulation.name / 
+               "SOAP-HBT" / 
                f"colibre_with_SOAP_membership_{self.cfg.simulation.snapshot_number:04d}.hdf5"
-
+        )
         return str(path)
 
+    
+
     def load_gas_in_halo_properties(self):
-        return load(self.gas_in_halo_properties_path).gas
+        return load(self.gas_in_halo_properties_path)
 
     # ==========================================================
     # Redshift + snapshot type
@@ -96,10 +115,11 @@ class unwrapper:
 
     @property
     def redshift_and_type(self):
-        path = Path(self.cfg.simulation.main_dir) / \
-               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / \
-               self.cfg.simulation.name / \
+        path = (Path(self.cfg.simulation.main_dir) / 
+               f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / 
+               self.cfg.simulation.name / 
                "output_list.txt"
+        )
 
         df = pandas.read_csv(
             str(path),
@@ -118,6 +138,10 @@ class unwrapper:
     @property
     def redshift(self):
         return self.redshift_and_type[0]
+    
+    @property
+    def scale_factor(self):
+        return 1/(self.redshift+1)
 
     @property
     def snapshot_type(self):
@@ -130,7 +154,7 @@ class unwrapper:
     @property
     def chimes_table_path(self) -> str:
         return str(
-            Path(self.cfg.simulation.chimes_table_dir) / \
+            Path(self.cfg.simulation.chimes_table_dir) / 
             f"z{self.redshift:.3f}_eqm.hdf5"
         )
 
@@ -140,10 +164,11 @@ class unwrapper:
 
     @property
     def output_directory(self) -> str:
-        path = Path(self.cfg.data_output.main_dir)/ \
-          self.cfg.data_output.results_dir / \
-          f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / \
-          self.cfg.simulation.name / \
+        path = (Path(self.cfg.data_output.main_dir)/ 
+          self.cfg.data_output.results_dir / 
+          f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / 
+          self.cfg.simulation.name
+        )
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
 

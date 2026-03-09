@@ -36,7 +36,9 @@ class Chemistry:
 @dataclass
 class Galaxy:
      single_galaxy: bool 
-     extend: float
+     galaxy_window: str
+     extend_unit: float
+     extend_value: int
      selection: str
 
      

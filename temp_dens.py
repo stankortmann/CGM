@@ -193,3 +193,6 @@ if __name__ == "__main__":
         )
 
         print(f"Finished test_colibre/{ion}_abundance_hist.png")
+
+#exit the python environment
+exit()

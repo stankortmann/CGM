@@ -225,13 +225,21 @@ class column_density_2d_swift:
     Designed for SWIFT + CHIMES workflows.
     """
 
-    def __init__(self, cfg, snapshot, length_unit, 
-                filenames, element, halo=None):
+    def __init__(self, cfg, length_unit, 
+                filenames, element, snapshot=None,gas_particles=None, halo=None):
         self.cfg = cfg
-        self.snapshot=snapshot
+        
+        #full snapshot
+        if halo is None:
+            self.snapshot=snapshot
+        #single galaxy
+        else:
+            self.snapshot=halo.gas_in_halo_properties
+            self.halo=halo #contains all the info of the galaxy like half mass radius etc.
+        #connect gas_particles to the full snapshot to enable project_gas function
         self.gas_particles = self.snapshot.gas
         self.element = element
-        self.halo = halo
+        
 
         self.chimes = chem.chimes(filenames.chimes_table_path)
 
@@ -281,7 +289,8 @@ class column_density_2d_swift:
         #not yet redefined, we have to make a cosma_array of the 
         #self.cfg.galaxy.single_galaxy unyt array
         if self.cfg.galaxy.single_galaxy:
-            barrier = self.cfg.galaxy.extend.to(self.length_unit)
+            #stored as physical property, please get to comoving
+            barrier = self.cfg.galaxy.extend.to_comoving()
             x0 = self.halo.position[:, 0]
             y0 = self.halo.position[:, 1]
             return [x0 - barrier, x0 + barrier,
@@ -300,7 +309,7 @@ class column_density_2d_swift:
         xedges_cosmo_array=cosmo_array(xedges,
                                         u.Mpc,
                                         comoving=True,
-                                        scale_factor=self.snapshot.metadata.scale_factor,  # a=0.5, i.e. z=1
+                                        scale_factor=self.snapshot.metadata.scale_factor, 
                                         scale_exponent=1,  # distances scale as a**1, so the scale exponent is 1
                                         )
         return xedges_cosmo_array
@@ -314,7 +323,7 @@ class column_density_2d_swift:
         yedges_cosmo_array=cosmo_array(yedges,
                                         u.Mpc,
                                         comoving=True,
-                                        scale_factor=self.snapshot.metadata.scale_factor,  # a=0.5, i.e. z=1
+                                        scale_factor=self.snapshot.metadata.scale_factor, 
                                         scale_exponent=1,  # distances scale as a**1, so the scale exponent is 1
                                         )
         return yedges_cosmo_array
@@ -327,8 +336,8 @@ class column_density_2d_swift:
                                         n_element,
                                         None,
                                         comoving=False,
-                                        scale_factor=self.snapshot.metadata.scale_factor,  # a=0.5, i.e. z=1
-                                        scale_exponent=0,  # distances scale as a**1, so the scale exponent is 1
+                                        scale_factor=self.snapshot.metadata.scale_factor,  
+                                        scale_exponent=0,  
                                         )
         return n_element_cosmo_array
 
@@ -387,6 +396,7 @@ class column_density_2d_swift:
     def column_density_distribution_function(
         self,
         ion=None,
+        ion_column_density=None,
         log_column_density_range=None,
         n_bins=100,
         los_range=[0,1], #projection axis length, still comoving
@@ -395,7 +405,7 @@ class column_density_2d_swift:
         if ion is None:
             cd = self.element_column_density
         else:
-            cd = self.column_density_ion(ion)
+            cd = ion_column_density
         
         
         values = cd.to_physical().value.flatten()

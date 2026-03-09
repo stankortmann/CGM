@@ -24,8 +24,14 @@ chemistry:
 
 galaxy:
   #Bool to select single galaxy mode
-  single_galaxy: off
-  extend: 0.5 #kpc physical, the extend of the window around the galaxy in the histograms 
+  single_galaxy: on
+  #choose: exclusive_sphere, inclusive_sphere, projected_aperture, input_halos, 
+  #input_halos_hbtplus 
+  #WILL ADD MORE BUT THIS WILL BE DONE LATER
+  galaxy_window: inclusive_sphere 
+  extend_value: 100 #kpc physical, the extend of the window around the galaxy in the histograms 
+  #choose: kpc, pc
+  extend_unit: kpc
   # choose: random, highest_gas_mass, most_bound_particles,
   selection: highest_gas_mass # choose: random, highest_gas_mass, most_bound_particles,
   

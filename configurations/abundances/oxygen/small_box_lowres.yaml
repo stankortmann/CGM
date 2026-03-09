@@ -1,6 +1,6 @@
 simulation:
   main_dir: /cosma8/data/dp004/colibre/Runs #do not touch!
-  chimes_table_dir: /cosma8/data/dp004/jlvc76/COLIBRE/Tables/chimes-data/EqAbundancesTables/colibre_HHe/ #this is where the chimes tables are stored, change if necessary
+  chimes_table_dir: /cosma8/data/dp004/jlvc76/COLIBRE/Tables/equilibrium_rates_and_speciesfractions/abundances_full/ #this is where the chimes tables are stored, change if necessary
   box_length: 12 #cMpc
   resolution: 6 # 10^resolution  M_solar 
   name: Thermal
@@ -8,7 +8,7 @@ simulation:
 
 data_output:
   main_dir: /cosma8/data/do012/dc-kort1/CGM/ #this is where the I store my outputs, change if necessary
-  results_dir: test_box_small_swift 
+  results_dir: test_box_lowres
 
 
 window:
@@ -16,11 +16,11 @@ window:
     y: [0.0, 1.0]
     z: [0.0, 0.2]
     projection_axis: z
-    resolution: 1000 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
+    resolution: 100 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
 
 chemistry:
-  element: hydrogen
-  ion: [Hm,HI,HII]
+  element: oxygen
+  ion: [OV,OVI,OVII,OVIII]
 
 galaxy:
   #Bool to select single galaxy mode

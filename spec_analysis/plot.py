@@ -98,8 +98,10 @@ class column_density_plotter:
         cbar.set_label(rf"$n_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
 
         plt.tight_layout()
-
-        file_path = self.output_dir / f"column_density_{name}.png"
+        #make directory
+        cd_dir=self.output_dir / f"column_density"
+        cd_dir.mkdir(parents=True, exist_ok=True)
+        file_path = cd_dir / f"{name}.png"
         plt.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -136,7 +138,10 @@ class column_density_plotter:
         if log_scale:
             plt.yscale("log")
 
-        file_path = self.output_dir / f"CDDF_{name}.png"
+        # Make the directory if it doesn't exist
+        cddf_dir = self.output_dir / "CDDF"
+        cddf_dir.mkdir(parents=True, exist_ok=True)
+        file_path = cddf_dir / f"{name}.png"
         plt.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close()
 
@@ -195,7 +200,7 @@ class column_density_plotter:
 
         plt.tight_layout()
 
-        file_path = self.output_dir / f"radial_transverse_{name}.png"
+        file_path = self.output_dir / f"radial_transverse/{name}.png"
         plt.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close()
 

@@ -2,7 +2,7 @@ from swiftsimio import load
 from swiftsimio import SWIFTDataset
 import swiftsimio as swift
 from swiftsimio.visualisation.projection import project_gas
-from swiftsimio.objects import cosmo_array, cosmo_factor
+from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
 import h5py 
 import gc
 import numpy as np
@@ -51,23 +51,27 @@ if __name__ == "__main__":
 
 
 
-
+#unpacking
 data_unpacker = unpack_data.unwrapper(cfg)
-comoving_box_size = data_unpacker.box_size.to("Mpc")
-cfg.galaxy.extend=cfg.galaxy.extend*u.kpc #is specified in the configuration files
-single_galaxy=gal_sel.single_galaxy(cfg=cfg,
-                                halo_properties=data_unpacker.load_halo_properties(), 
-                                gas_in_halo_properties=data_unpacker.load_gas_in_halo_properties())
 
 
-gas_particles=single_galaxy.gas
+single_galaxy=gal_sel.single_galaxy(cfg=cfg, data_unpacker=data_unpacker)
+
+#we now add an extra field to cfg.galaxy to get proper galaxy extend window
+cfg.galaxy.extend= cosmo_quantity(cfg.galaxy.extend_value,
+                                u.Unit(cfg.galaxy.extend_unit),
+                                comoving=False,
+                                scale_factor=data_unpacker.scale_factor,            
+                                cosmo_factor=1
+                                )
+
+
 
 # --- 2D COLUMN DENSITY ---  
-cd_2d=density_profiles.column_density_2d(
+cd_2d=density_profiles.column_density_2d_swift(
     cfg=cfg,
     filenames=data_unpacker,
     length_unit="Mpc",
-    gas_particles=gas_particles,
     element=cfg.chemistry.element,
     halo=single_galaxy
 )
@@ -110,6 +114,7 @@ for ion in cfg.chemistry.ion:
 
     ion_cddf,ion_bin_centers,ion_bin_width=cd_2d.column_density_distribution_function(
                                                             ion=ion,
+                                                            ion_column_density=n_ion_column_density,
                                                             log_column_density_range=None, #if None it selects the complete range
                                                             n_bins=100,
                                                             normalize=True)
@@ -121,7 +126,7 @@ for ion in cfg.chemistry.ion:
                         ion=ion,
                         range_plot=None, #range of the log bins
                         )
-
+""" 
 # --- TRANSVERSE DISTANCE COLUMN DENSITY --- 
 cd_transverse=density_profiles.column_density_transverse(
     cfg=cfg,
@@ -167,6 +172,7 @@ for ion in cfg.chemistry.ion:
                     ion=ion,
                     log_scale=False
                     )
-
+"""
+exit()
 
 

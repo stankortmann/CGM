@@ -140,8 +140,10 @@ for ion in cfg.chemistry.ion:
                         range_plot=None, #range of the log bins
                         log_scale=True
                         )
-   
 
+   
+#exit the python environment
+exit()
 
 
 
