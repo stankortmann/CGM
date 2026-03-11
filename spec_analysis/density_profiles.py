@@ -72,9 +72,10 @@ class column_density_2d:
 
     @cached_property
     def histogram_range(self):
-        barrier = self.cfg.galaxy.extend.to(self.length_unit)
+        
 
         if self.cfg.galaxy.single_galaxy:
+            barrier = self.cfg.galaxy.extend.to(self.length_unit)
             x0 = self.halo.position[:, 0].to(self.length_unit).to_physical().value
             y0 = self.halo.position[:, 1].to(self.length_unit).to_physical().value
             return [[x0 - barrier, x0 + barrier],
@@ -135,6 +136,7 @@ class column_density_2d:
     def element_column_density(self):
         x = self.positions[:, 0].value
         y = self.positions[:, 1].value
+       
 
         hist= histogram2d(
             x=x,
@@ -230,12 +232,22 @@ class column_density_2d_swift:
         self.cfg = cfg
         
         #full snapshot
-        if halo is None:
+        if snapshot is not None and halo is None:
             self.snapshot=snapshot
+            self.periodic=True
+            
         #single galaxy
-        else:
-            self.snapshot=halo.gas_in_halo_properties
+        elif snapshot is None and halo is not None:
+            self.snapshot=halo.snapshot
             self.halo=halo #contains all the info of the galaxy like half mass radius etc.
+            self.periodic=False
+
+        elif snapshot is None and halo is None:
+            print("ERROR: No gas particles received.")
+            exit()
+        elif snapshot is not None and halo is not None:
+            print("ERROR: Single halo and full box particles received.")
+            exit()
         #connect gas_particles to the full snapshot to enable project_gas function
         self.gas_particles = self.snapshot.gas
         self.element = element
@@ -291,10 +303,9 @@ class column_density_2d_swift:
         if self.cfg.galaxy.single_galaxy:
             #stored as physical property, please get to comoving
             barrier = self.cfg.galaxy.extend.to_comoving()
-            x0 = self.halo.position[:, 0]
-            y0 = self.halo.position[:, 1]
-            return [x0 - barrier, x0 + barrier,
-                    y0 - barrier, y0 + barrier]
+            
+            return [ - barrier,  + barrier,
+                    - barrier,  + barrier]
         else:
             return [self.cfg.window.x[0],
                     self.cfg.window.x[1],
@@ -357,22 +368,34 @@ class column_density_2d_swift:
             resolution=self.cfg.window.resolution,
             region=self.projection_range,
             parallel=True,
-            periodic=True,
+            periodic=self.periodic,
         )
         projection = scale_projection*scale
         return projection.to("1/cm**2")
 
 
     def column_density_ion(self, ion):
+        
+        # Check if the ion fraction is directly available in the snapshot
+        species = self.gas_particles.species_fractions
 
-        log_frac = self.chimes.extract_ion_abundance(
-            ion=ion,
-            log_Z=self.log_Z,
-            log_T=self.log_T,
-            log_n_H_cm3=self.log_n_H_cm3,
-        )
+        if hasattr(species, ion):
+            # Use the ion fraction from the simulation output
+            ion_fraction = getattr(species, ion)
 
-        n_ion = self.n_element.to_comoving() * 10**log_frac
+            n_ion = self.n_element.to_comoving() * ion_fraction
+
+        else:
+            # Fall back to CHIMES ionization table
+            log_frac = self.chimes.extract_ion_abundance(
+                ion=ion,
+                log_Z=self.log_Z,
+                log_T=self.log_T,
+                log_n_H_cm3=self.log_n_H_cm3,
+            )
+
+            n_ion = self.n_element.to_comoving() * 10**log_frac
+            
         scale=np.median(n_ion).value
         n_ion_scale=n_ion/scale
         name_ion = f"{ion}_number"
@@ -388,7 +411,7 @@ class column_density_2d_swift:
             resolution=self.cfg.window.resolution,
             region=self.projection_range,
             parallel=True,
-            periodic=True,
+            periodic=self.periodic,
         )
         projection=scale_projection*scale
         return projection.to("1/cm**2")
@@ -446,7 +469,8 @@ class column_density_transverse:
     Designed for SWIFT + CHIMES workflows.
     """
 
-    def __init__(self, cfg, length_unit, filenames, comoving_box_size, gas_particles, element, halo=None):
+    def __init__(self, cfg, length_unit, filenames, 
+            comoving_box_size, gas_particles, element, halo=None):
         self.cfg = cfg
         self.gas_particles = gas_particles
         self.box_size=comoving_box_size.to_physical() #we want proper distances

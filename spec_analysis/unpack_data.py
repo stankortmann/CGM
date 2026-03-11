@@ -52,9 +52,10 @@ class unwrapper:
         return self._mask_snapshot.metadata.boxsize[0]
     
     def load_snapshot(self, load_region=None):
+        _ = self.snapshot_path  # force creation of _mask_snapshot
         if load_region is None:
             return load(self.snapshot_path)
-
+        
         self._mask_snapshot.constrain_spatial(load_region)
         return load(self.snapshot_path, mask=self._mask_snapshot)
 
@@ -141,7 +142,9 @@ class unwrapper:
     
     @property
     def scale_factor(self):
-        return 1/(self.redshift+1)
+        # Ensure mask exists by accesssing the path
+        _ = self.snapshot_path
+        return self._mask_snapshot.metadata.scale_factor
 
     @property
     def snapshot_type(self):

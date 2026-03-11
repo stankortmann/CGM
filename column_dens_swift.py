@@ -90,7 +90,7 @@ cd_2d=density_profiles.column_density_2d_swift(
 )
 ### --- ELEMENT --- ####
 n_element_column_density=cd_2d.element_column_density
-
+print("the sum of the column density of the element:",np.sum(n_element_column_density))
 plotter = plot.column_density_plotter(x_edges=cd_2d.xedges.to_physical().value, 
                                     y_edges=cd_2d.yedges.to_physical().value,
                                     length_unit="Mpc",

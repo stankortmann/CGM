@@ -17,4 +17,4 @@ dist/
 *.egg
 
 #configurations
-configurations/
+**/configurations/

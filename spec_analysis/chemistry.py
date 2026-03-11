@@ -260,6 +260,7 @@ class chimes:
                     "COp": 154,
                     "HOCp": 155,
                     "O2p": 156}
+                    
         ion_index = chimes_dict[ion]
         
         ion_abundance_table = self.abundances[:,:, :, ion_index]

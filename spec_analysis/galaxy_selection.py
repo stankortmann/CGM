@@ -1,6 +1,6 @@
 import numpy as np
-
-
+from functools import cached_property
+from swiftgalaxy import SWIFTGalaxy, SOAP
 class gas_properties:
     pass
 
@@ -89,7 +89,7 @@ class single_galaxy:
         gas.densities = np.take(self.gas.densities, indices,axis=0)
         gas.masses = np.take(self.gas.masses, indices,axis=0)
         gas.coordinates = np.take(self.gas.coordinates, indices,axis=0)
-        gas.volumes = np.take(self.gas.volumes, indices,axis=0)
+        #gas.volumes = np.take(self.gas.volumes, indices,axis=0)
         gas.smoothing_lengths = np.take(self.gas.smoothing_lengths, indices,axis=0)
         gas.metal_mass_fractions = np.take(self.gas.metal_mass_fractions, indices,axis=0)
 
@@ -101,5 +101,150 @@ class single_galaxy:
         gas.element_mass_fractions = elem
 
         return gas
+
+
+class single_galaxy_gas_mask:
+
+    def __init__(self, cfg, data_unpacker):
+
+        self.halo_properties = data_unpacker.load_halo_properties()
+        self.cfg = cfg
+        #get the field in which the particles are stored
+        self.halo_selection_field=getattr(self.halo_properties,data_unpacker.halo_selection_field)
+
+        #loads halo and selects region for which to load in the gas
+        self._select_halo()
+        #load in the snapshot surrounding the centre of mass of the galaxy/halo
+        self.snapshot=data_unpacker.load_snapshot(load_region=self.gas_mask)
+
+       
+
+    # ==========================================================
+    # Selection Logic
+    # ==========================================================
+
+    
+    def _select_halo(self):
+        
+        if self.cfg.galaxy.selection == "most_bound_particles":
+            bound = self.halo_selection_field.number_of_bound_particles
+            idx = np.argmax(bound)
+
+        elif self.cfg.galaxy.selection == "highest_gas_mass":
+            gas_mass = self.halo_selection_field.gas_mass
+            idx = np.argmax(gas_mass)
+
+        elif self.cfg.galaxy.selection == "random":
+            total = len(self.halo_selection_field.gas_mass)
+            idx = np.random.randint(0, total)
+
+        else:
+            raise ValueError("Unknown selection mode")
+
+        self._retrieve_halo(idx)
+
+    # ==========================================================
+    # Halo Properties (lazy)
+    # ==========================================================
+
+    def _retrieve_halo(self, index):
+
+        self.catalogue_id =  self.halo_properties.input_halos.halo_catalogue_index[index]
+
+
+        self.position = self.halo_selection_field.centre_of_mass[index]
+        self.stellar_mass = self.halo_selection_field.stellar_mass[index]
+        self.half_mass_radius_gas = self.halo_selection_field.half_mass_radius_gas[index]
+
+        
+
+    #I want it stored and not repeatedly calculated
+    @cached_property
+    def gas_mask(self):
+
+        barrier = self.cfg.galaxy.extend.to_comoving() # is already a cosmo_quantity
+        x0 = self.position[0]
+        y0 = self.position[1]
+        z0 = self.position[2]
+        
+        mask=[[x0 - barrier, x0 + barrier],
+              [y0 - barrier, y0 + barrier],
+              [z0 - barrier, z0 + barrier]]
+        
+        return mask
+
+#--- USES SWIFTGALAXY TO LOAD IN GAS PARTICLES, MASSIVE I/0 IMPROVEMENT!!---
+class single_galaxy_new_new:
+
+    def __init__(self, cfg, data_unpacker):
+
+        self.halo_properties = data_unpacker.load_halo_properties()
+        self.cfg = cfg
+        #get the field in which the particles are stored
+        self.halo_selection_field=getattr(self.halo_properties,data_unpacker.halo_selection_field)
+
+        #loads halo and selects region for which to load in the gas
+        halo_index=self._select_halo()
+        self._retrieve_halo(halo_index)
+        #load in the snapshot surrounding the centre of mass of the galaxy/halo
+        self.snapshot=SWIFTGalaxy(
+                    data_unpacker.gas_in_halo_properties_path,  # notice virtual_snapshot, not snapshot
+                    SOAP(data_unpacker.halo_properties_path, soap_index=halo_index),
+                )
+
+       
+
+    # ==========================================================
+    # Selection Logic
+    # ==========================================================
+
+    
+    def _select_halo(self):
+        
+        if self.cfg.galaxy.selection == "most_bound_particles":
+            bound = self.halo_selection_field.number_of_bound_particles
+            idx = np.argmax(bound)
+
+        elif self.cfg.galaxy.selection == "highest_gas_mass":
+            gas_mass = self.halo_selection_field.gas_mass
+            idx = np.argmax(gas_mass)
+
+        elif self.cfg.galaxy.selection == "random":
+            total = len(self.halo_selection_field.gas_mass)
+            idx = np.random.randint(0, total)
+
+        else:
+            raise ValueError("Unknown selection mode")
+
+        return idx
+
+    # ==========================================================
+    # Halo Properties (lazy)
+    # ==========================================================
+
+    def _retrieve_halo(self, index):
+
+        self.catalogue_id =  self.halo_properties.input_halos.halo_catalogue_index[index]
+
+
+        self.position = self.halo_selection_field.centre_of_mass[index]
+        self.stellar_mass = self.halo_selection_field.stellar_mass[index]
+        self.half_mass_radius_gas = self.halo_selection_field.half_mass_radius_gas[index]
+
+    @cached_property
+    def mask(self):
+
+        barrier = self.cfg.galaxy.extend.to_comoving() # is already a cosmo_quantity
+        x0 = self.position[0]
+        y0 = self.position[1]
+        z0 = self.position[2]
+        
+        mask=[[x0 - barrier, x0 + barrier],
+              [y0 - barrier, y0 + barrier],
+              [z0 - barrier, z0 + barrier]]
+        
+        return mask
+
+
 
         

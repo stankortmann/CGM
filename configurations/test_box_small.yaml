@@ -14,9 +14,9 @@ data_output:
 window:
     x: [0.0, 1.0]
     y: [0.0, 1.0]
-    z: [0.0, 0.2]
+    z: [0.0, 1.0]
     projection_axis: z
-    resolution: 1000 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
+    resolution: 100 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
 
 chemistry:
   element: hydrogen
@@ -24,7 +24,7 @@ chemistry:
 
 galaxy:
   #Bool to select single galaxy mode
-  single_galaxy: on
+  single_galaxy: off
   #choose: exclusive_sphere, inclusive_sphere, projected_aperture, input_halos, 
   #input_halos_hbtplus 
   #WILL ADD MORE BUT THIS WILL BE DONE LATER
