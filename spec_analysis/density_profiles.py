@@ -8,6 +8,7 @@ from swiftsimio.objects import cosmo_array, cosmo_factor
 #own modules
 from spec_analysis import chemistry as chem
 from spec_analysis import plot
+from spec_analysis import cosmology as cosmo
 
 
 
@@ -18,13 +19,13 @@ class column_density_2d:
     Designed for SWIFT + CHIMES workflows.
     """
 
-    def __init__(self, cfg, length_unit, filenames, gas_particles, element, halo=None):
+    def __init__(self, cfg, length_unit, data_unpacker, gas_particles, element, halo=None):
         self.cfg = cfg
         self.gas_particles = gas_particles
         self.element = element
         self.halo = halo
 
-        self.chimes = chem.chimes(filenames.chimes_table_path)
+        self.chimes = chem.chimes(data_unpacker.chimes_table_path)
 
         self.length_unit=length_unit
 
@@ -227,9 +228,12 @@ class column_density_2d_swift:
     Designed for SWIFT + CHIMES workflows.
     """
 
-    def __init__(self, cfg, length_unit, 
-                filenames, element, snapshot=None,gas_particles=None, halo=None):
+    def __init__(self, cfg, data_unpacker, 
+            element, snapshot=None,gas_particles=None, halo=None):
+        
+        
         self.cfg = cfg
+        self.cosmo=cosmo.cosmo_tools(data_unpacker=data_unpacker,cfg=cfg)
         
         #full snapshot
         if snapshot is not None and halo is None:
@@ -253,9 +257,9 @@ class column_density_2d_swift:
         self.element = element
         
 
-        self.chimes = chem.chimes(filenames.chimes_table_path)
+        self.chimes = chem.chimes(data_unpacker.chimes_table_path)
 
-        self.length_unit=length_unit
+        
 
 
 
@@ -432,14 +436,16 @@ class column_density_2d_swift:
         
         
         values = cd.to_physical().value.flatten()
-        values = values[values > 0]
-        #valid sightlines
-
-        log_values = np.log10(values)
+        
+        N_pixels=len(values)
+        #valid sightlines get logged
+        log_values = np.log10(values[values > 0])
 
         #for now it is simple but this has to become a function to 
         #calculate line of sight range
-        los_distance=(los_range[1]-los_range[0]).to("cm").to_physical().value
+        los_distance=los_range[1]-los_range[0]
+        dX_single=self.cosmo.dX(column_length=los_distance)
+        dX_total=N_pixels*dX_single
 
         if log_column_density_range is None:
             log_column_density_range = [
@@ -453,12 +459,14 @@ class column_density_2d_swift:
             range=log_column_density_range
         )
 
-        dlog = edges[1] - edges[0]
-        centers = 0.5 * (edges[1:] + edges[:-1])
-        #f(N)=d^2(N)/dlog(N)*dX, dX=los_distance
-        cddf=hist/(dlog*los_distance)
+        dlogN = edges[1] - edges[0]
 
-        return cddf, centers, dlog
+        centers = 0.5 * (edges[1:] + edges[:-1])
+        N = 10**centers
+
+        cddf = hist / (dlogN * np.log(10) * N * dX_total)
+
+        return cddf, centers, dlogN
 
 
 class column_density_transverse:
@@ -469,7 +477,7 @@ class column_density_transverse:
     Designed for SWIFT + CHIMES workflows.
     """
 
-    def __init__(self, cfg, length_unit, filenames, 
+    def __init__(self, cfg, length_unit, data_unpacker, 
             comoving_box_size, gas_particles, element, halo=None):
         self.cfg = cfg
         self.gas_particles = gas_particles
@@ -477,7 +485,7 @@ class column_density_transverse:
         self.element = element
         self.halo = halo
         self.length_unit=length_unit
-        self.chimes = chem.chimes(filenames.chimes_table_path)
+        self.chimes = chem.chimes(data_unpacker.chimes_table_path)
 
     # ==========================================================
     # Basic particle properties (cached like 2D case)

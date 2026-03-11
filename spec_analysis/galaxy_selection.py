@@ -174,7 +174,7 @@ class single_galaxy_gas_mask:
         return mask
 
 #--- USES SWIFTGALAXY TO LOAD IN GAS PARTICLES, MASSIVE I/0 IMPROVEMENT!!---
-class single_galaxy_new_new:
+class single_galaxy_swift_galaxy:
 
     def __init__(self, cfg, data_unpacker):
 
@@ -202,7 +202,7 @@ class single_galaxy_new_new:
     def _select_halo(self):
         
         if self.cfg.galaxy.selection == "most_bound_particles":
-            bound = self.halo_selection_field.number_of_bound_particles
+            bound = self.halo_selection_field.number_of_gas_particles
             idx = np.argmax(bound)
 
         elif self.cfg.galaxy.selection == "highest_gas_mass":

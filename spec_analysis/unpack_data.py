@@ -15,6 +15,8 @@ import swiftsimio as swift
 from swiftsimio import load
 
 
+
+
 class unwrapper:
 
     def __init__(self, cfg):
@@ -38,26 +40,37 @@ class unwrapper:
 
         path = str(path)
 
-        #build mask + metadata once
-        if not hasattr(self, "_mask_snapshot"):
-            self._mask_snapshot = swift.mask(path)
+        
         return path
+    #build mask + metadata once
+    @property
+    def mask_snapshot(self):
+        return swift.mask(self.snapshot_path)
     
 
     @property
     def box_size(self):
-        # Ensure mask exists by accesssing the path
-        _ = self.snapshot_path
+        return self.mask_snapshot.metadata.boxsize[0]
 
-        return self._mask_snapshot.metadata.boxsize[0]
+    @property
+    def scale_factor(self):
+
+        return self.mask_snapshot.metadata.scale_factor
+    
+    @property
+    def cosmology(self):
+
+        return self.mask_snapshot.metadata.cosmology
     
     def load_snapshot(self, load_region=None):
-        _ = self.snapshot_path  # force creation of _mask_snapshot
+        
         if load_region is None:
             return load(self.snapshot_path)
         
-        self._mask_snapshot.constrain_spatial(load_region)
-        return load(self.snapshot_path, mask=self._mask_snapshot)
+        #new mask for spatial constraints
+        mask = swift.mask(self.snapshot_path)  # full mask, with gas/dm
+        mask.constrain_spatial(load_region)
+        return load(self.snapshot_path, mask=mask)
 
     # ==========================================================
     # Halo properties
@@ -139,12 +152,7 @@ class unwrapper:
     @property
     def redshift(self):
         return self.redshift_and_type[0]
-    
-    @property
-    def scale_factor(self):
-        # Ensure mask exists by accesssing the path
-        _ = self.snapshot_path
-        return self._mask_snapshot.metadata.scale_factor
+
 
     @property
     def snapshot_type(self):
@@ -170,7 +178,8 @@ class unwrapper:
         path = (Path(self.cfg.data_output.main_dir)/ 
           self.cfg.data_output.results_dir / 
           f"L{self.cfg.simulation.box_length:03d}_m{self.cfg.simulation.resolution}" / 
-          self.cfg.simulation.name
+          self.cfg.simulation.name /
+          f"z_{self.redshift:.3f}"
         )
         path.mkdir(parents=True, exist_ok=True)
         return str(path)

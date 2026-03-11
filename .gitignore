@@ -6,7 +6,7 @@
 *.npz
 *.hdf5
 *.png
-*/old/
+/old/
 
 
 # Packaging
@@ -17,4 +17,4 @@ dist/
 *.egg
 
 #configurations
-**/configurations/
+/configurations/

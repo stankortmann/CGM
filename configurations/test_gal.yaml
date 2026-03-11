@@ -17,6 +17,8 @@ window:
     z: [0.0, 0.2]
     projection_axis: z
     resolution: 100 #number of bins in the histogram (2D histogram is shape(resolutions,resolution))
+    z_center: 0.01
+    z_range: [0.0,0.02]
 
 chemistry:
   element: hydrogen

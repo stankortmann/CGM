@@ -27,6 +27,8 @@ class Window:
     z: List[float]
     projection_axis: str
     resolution: int
+    z_center: float
+    z_range: List[float]
 
 @dataclass
 class Chemistry:

@@ -50,9 +50,11 @@ class temperature_density_plotter:
 class column_density_plotter:
 
     def __init__(self, x_edges, y_edges,data_unpacker,length_unit="Mpc"):
-        self.xedges = x_edges
-        self.yedges = y_edges
+
         self.length_unit=length_unit
+        self.xedges = x_edges.to(length_unit).to_physical().value
+        self.yedges = y_edges.to(length_unit).to_physical().value
+        
         self.output_dir = Path(data_unpacker.output_directory)
 
     
@@ -125,7 +127,7 @@ class column_density_plotter:
 
         plt.bar(bin_centers, cddf, width=bin_width)
 
-        plt.ylabel(r"$\frac{d N}{d\log_{10} N\, d\ell}\,[\mathrm{cm}^{-1}]$")
+        plt.ylabel(r"$\frac{d^2 n}{dN d\chi}$")
         plt.xlabel(rf"$\log_{{10}}(N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}])$")
 
         plt.title(f"CDDF of {name}")

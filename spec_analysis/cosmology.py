@@ -7,19 +7,26 @@ from scipy.optimize import curve_fit
 from scipy.interpolate import PchipInterpolator
 import unyt as u
 import astropy.units as au
+from functools import cached_property
+from swiftsimio.objects import cosmo_array, cosmo_factor
 
 
 
 class cosmo_tools:
     
     def __init__(self,
-    box_size,
-    constants,
-    redshift,
-    redshift_bin_width,
-    update=None
-    ):
-        self.constants = constants
+                data_unpacker,
+                cfg,
+                update=None
+                ):
+            
+        self.data_unpacker=data_unpacker
+        self.cfg=cfg
+        
+        
+        #now loading in constants
+        constants = data_unpacker.cosmology
+        
         update = {} if update is None else update
         #for colossus cosmology class
         if constants.name is not None:
@@ -27,8 +34,9 @@ class cosmo_tools:
         else: #for the swiftsimio cosmology class
             self.name=type(constants).__name__
         self.name= update.get("name",self.name)
-        self.box_size=box_size
-
+        
+        self.box_size=data_unpacker.box_size
+        self.scale_factor=data_unpacker.scale_factor
         
         
         #Hubble constant
@@ -105,27 +113,16 @@ class cosmo_tools:
         #constants
         self.c_km_s = c.to('km/s').value
 
+
+        #position of the middle of the slice
+        self.z_center = self.cfg.window.z_center
+        #manually set the limits of the particles redshift. This is an educated guess. Better set to wide than to low
+        self.z_min=self.cfg.window.z_range[0]
+        self.z_max=self.cfg.window.z_range[1]
+
         
 
 
-        #save all the importan parameters here
-        self.redshift=redshift
-        
-        self.bao_distance=self._bao_sound_horizon()
-    
-        
-        
-
-        #set outer and inner edges of the redshift bin
-        self.bin_width=redshift_bin_width
-        self._edges_bin()
-
-        #---function to transform D_c to z ---
-        #call cosmology.cosmo_tools.comoving_distance_to_redshift(redshift)
-        self.comoving_distance_to_redshift=self._comoving_distance_to_redshift()
-
-        #complete sphere and the maximum angle, handy to store here:
-        self._observer_position()
 
 
     # ----------------------------- Update method -----------------------------
@@ -150,14 +147,6 @@ class cosmo_tools:
         return new_init
     
 
-    def check_w_crossing(self):
-        w_today = self.w0
-        w_early = self.w0 + self.wa
-        
-        if (w_today + 1) * (w_early + 1) > 0:
-            self.w_crossing=False
-        else:
-            self.w_crossing=True
     
     def E(self, z):
         """Dimensionless Hubble parameter E(z) = H(z)/H0."""
@@ -176,32 +165,9 @@ class cosmo_tools:
             self.Ok0 * (1 + z)**2
         )
 
-    @staticmethod
-    def redshift_with_error(z):
-        #randomly distributes point in the z (radial) axis
-        #we ignore systematic errors for now
-        sigma_z=0.0005*(1+z)
-        random_z=np.random.normal(z,sigma_z)
-        return random_z
 
-    
-        
-    def _edges_bin(self):
-        half_binwidth=self.bin_width/2
-        self.min_redshift=self.redshift-half_binwidth
-        self.max_redshift=self.redshift+half_binwidth
-        self.outer_edge_bin=self.comoving_distance(self.max_redshift)
-        self.inner_edge_bin=self.comoving_distance(self.min_redshift)
-        self.center_bin=self.comoving_distance(self.redshift)
-        self.delta_dr=self.outer_edge_bin-self.inner_edge_bin
 
-    def _observer_position(self):
-        if self.outer_edge_bin < 0.5 * self.box_size:
-            self.complete_sphere=True
-            self.max_angle=np.pi
-        else:
-            self.complete_sphere=False
-            self.max_angle=np.arcsin(self.box_size / (2 *self.outer_edge_bin))*u.rad
+
 
     def comoving_distance(self, z):
         """
@@ -217,8 +183,18 @@ class cosmo_tools:
             
             Dc_list.append(Dc_i)
 
-        Dc_array = np.array(Dc_list) * u.Mpc
-        return Dc_array if len(Dc_array) > 1 else Dc_array[0]
+        Dc_array = np.array(Dc_list) 
+        
+        Dc_cosmo = cosmo_array(
+                            Dc_array,
+                            u.Mpc,
+                            comoving=True,
+                            #set the scale factor at the value of the simulation snapshot
+                            scale_factor=self.scale_factor, 
+                            scale_exponent=1,
+            )
+        return Dc_cosmo if len(Dc_cosmo) > 1 else Dc_cosmo[0]
+    
     
     def transverse_comoving_distance(self,z):
         """
@@ -229,17 +205,24 @@ class cosmo_tools:
         if self.Ok0 > 0:
             sqrt_Ok = np.sqrt(self.Ok0)
             Dm = (self.c_km_s / self.H0) / sqrt_Ok * \
-            np.sinh(sqrt_Ok * Dc.value * self.H0 / self.c_km_s)* u.Mpc
+            np.sinh(sqrt_Ok * Dc.value * self.H0 / self.c_km_s)
         #closed curvature case
         elif self.Ok0 < 0:
             sqrt_abs_Ok = np.sqrt(-self.Ok0)
             Dm = (self.c_km_s / self.H0) / sqrt_abs_Ok *\
-             np.sin(sqrt_abs_Ok * Dc.value * self.H0 / self.c_km_s) * u.Mpc
+             np.sin(sqrt_abs_Ok * Dc.value * self.H0 / self.c_km_s)
         #flat case
         else:
-            Dm = Dc.value * u.Mpc
+            Dm = Dc.value
         
-        return Dm
+        Dm_cosmo = cosmo_array(
+                            Dm,
+                            u.Mpc,
+                            comoving=True,
+                            scale_factor=self.scale_factor,
+                            scale_exponent=1
+                        )
+        return Dm_cosmo if Dm_cosmo.size > 1 else Dm_cosmo[0]
 
 
     def luminosity_distance(self,z):
@@ -256,34 +239,11 @@ class cosmo_tools:
         Da = self.transverse_comoving_distance(z) / (1 + z)
         return Da
 
-    def _bao_sound_horizon(self):
-        """
-        Compute BAO comoving sound horizon r_d at the drag epoch.
-        Based on Eisenstein & Hu (1998).
-        """
-        # --- Drag epoch redshift ---
-        b1 = 0.313 * self.Omh2**(-0.419) * (1 + 0.607 * self.Omh2**0.674)
-        b2 = 0.238 * self.Omh2**0.223
-        z_drag = 1291 * self.Omh2**0.251 / (1 + 0.659 * self.Omh2**0.828) *\
-         (1 + b1 * self.Obh2**b2)
-
-        # --- Sound horizon integral ---
-        def R_of_z(zp):
-            return (3.0 * self.Ob0) / (4.0 * self.Omega_gamma) / (1.0 + zp)
-
-        def c_s(zp):  
-            return self.c_km_s / np.sqrt(3.0 * (1.0 + R_of_z(zp)))
-
-        def integrand(zp):
-            return c_s(zp) / (self.H0 *self.E(zp))
-
-        r_d, _ = quad(integrand, z_drag, 1e7, epsrel=1e-6, limit=200)
-        return r_d*u.Mpc
-
-    def _comoving_distance_to_redshift(self):
-        #builds a mapping of z <--> D_c
+    #---function to transform D_c to z ---
+    @cached_property
+    def comoving_distance_to_redshift(self):
         #maybe increase resolution??
-        z_grid = np.linspace(self.min_redshift, self.max_redshift, int(1e5)) 
+        z_grid = np.linspace(self.z_min, self.z_max, int(1e5)) 
         Dc_grid = np.array([self.comoving_distance(z).value for z in z_grid])  # Mpc
         # ensure monotonic
         assert np.all(np.diff(Dc_grid) > 0)
@@ -291,7 +251,22 @@ class cosmo_tools:
         # call inv_interp(Dc_array) -> z_array (or raises for out-of-range)
         return inv_interp 
 
+    def dX(self, column_length):
 
+
+        d_center = self.comoving_distance(self.z_center)
+
+        d_front = d_center - 0.5 * column_length.to_comoving()
+        d_back  = d_center + 0.5 * column_length.to_comoving()
+
+        delta_z = self.comoving_distance_to_redshift(d_back) - \
+                self.comoving_distance_to_redshift(d_front)
+
+        E_z_middle = self.E(self.z_center)
+
+        dX = (delta_z * (1 + self.z_center)**2) / E_z_middle
+
+        return dX
 
     #calculating effective cosmological functions within a certain redshift bin
     @staticmethod
