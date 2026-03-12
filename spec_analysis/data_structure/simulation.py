@@ -16,6 +16,14 @@ class Data_output:
     results_dir:str
 
 @dataclass
+class Column_density:
+    log_range_2d: List[float]
+    length_unit_2d: str
+    log_range_cddf: List[float]
+    cddf_bins: int
+
+
+@dataclass
 class Monitoring:
     cpu_ram_monitor: bool
     monitor_interval: int
@@ -53,5 +61,6 @@ class Config:
     chemistry: Chemistry
     galaxy: Galaxy
     monitoring: Monitoring
+    column_density: Column_density
 
   

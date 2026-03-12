@@ -191,6 +191,7 @@ class single_galaxy_swift_galaxy:
                     data_unpacker.gas_in_halo_properties_path,  # notice virtual_snapshot, not snapshot
                     SOAP(data_unpacker.halo_properties_path, soap_index=halo_index),
                 )
+       
 
        
 

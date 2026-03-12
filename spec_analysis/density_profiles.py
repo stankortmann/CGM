@@ -149,7 +149,7 @@ class column_density_2d:
         )
 
         cd = hist / self.pixel_area
-        return cd.to("1/cm**2")
+        return cd.to("1/cm**2").to_physical().value
 
 
     def column_density_ion(self, ion):
@@ -320,7 +320,7 @@ class column_density_2d_swift:
     def xedges(self):
         xmin=self.projection_range[0]
         xmax=self.projection_range[1]
-        xedges=np.linspace(xmin,xmax,self.cfg.window.resolution+1)
+        xedges=np.linspace(xmin.value,xmax.value,self.cfg.window.resolution+1)
         xedges_cosmo_array=cosmo_array(xedges,
                                         u.Mpc,
                                         comoving=True,
@@ -334,7 +334,7 @@ class column_density_2d_swift:
     def yedges(self):
         ymin=self.projection_range[2]
         ymax=self.projection_range[3]
-        yedges=np.linspace(ymin,ymax,self.cfg.window.resolution+1)
+        yedges=np.linspace(ymin.value,ymax.value,self.cfg.window.resolution+1)
         yedges_cosmo_array=cosmo_array(yedges,
                                         u.Mpc,
                                         comoving=True,
@@ -363,7 +363,9 @@ class column_density_2d_swift:
         #ensure comoving as the snapshot data is in comoving coordinates
         element_number=self.n_element.to_comoving() 
         #just take the median, rescaling ensures no float overflow
-        scale=np.median(element_number).value 
+        scale = np.percentile(element_number.value, 90)
+        if scale <= 0:
+            scale = 1.0
         scaled_element_number=element_number/scale
         self.gas_particles.element_number=scaled_element_number
         scale_projection = project_gas(
@@ -400,7 +402,9 @@ class column_density_2d_swift:
 
             n_ion = self.n_element.to_comoving() * 10**log_frac
             
-        scale=np.median(n_ion).value
+        scale = np.percentile(n_ion.value, 90)
+        if scale <= 0:
+            scale = 1.0
         n_ion_scale=n_ion/scale
         name_ion = f"{ion}_number"
 
@@ -430,12 +434,12 @@ class column_density_2d_swift:
         ):
 
         if ion is None:
-            cd = self.element_column_density
-        else:
-            cd = ion_column_density
+            cd = self.element_column_density.to_physical()
+        else: #this is already physical as the projection function returns physical units, but we want to be sure
+            cd = ion_column_density.to_physical()
         
         
-        values = cd.to_physical().value.flatten()
+        values = cd.value.flatten()
         
         N_pixels=len(values)
         #valid sightlines get logged

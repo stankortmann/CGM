@@ -47,25 +47,30 @@ class temperature_density_plotter:
 
 
 
+
 class column_density_plotter:
 
-    def __init__(self, x_edges, y_edges,data_unpacker,length_unit="Mpc"):
+    def __init__(self, cfg, data_unpacker, x_edges, y_edges,cfg_plot=None):
 
-        self.length_unit=length_unit
-        self.xedges = x_edges.to(length_unit).to_physical().value
-        self.yedges = y_edges.to(length_unit).to_physical().value
-        
+        self.cfg = cfg
+        self.data_unpacker = data_unpacker
+        if cfg_plot is not None:
+            self.cfg_plot = cfg_plot
+        self.length_unit = self.cfg.column_density.length_unit_2d
+
+        self.xedges = x_edges.to(self.length_unit).value
+        self.yedges = y_edges.to(self.length_unit).value
+
         self.output_dir = Path(data_unpacker.output_directory)
 
-    
-
     def _resolve_name(self, ion=None, element=None):
+
         if ion is not None:
             return ion
         if element is not None:
             return element
-        raise ValueError("Either ion or element must be provided.")
 
+        raise ValueError("Either ion or element must be provided.")
 
     def plot_xy(
         self,
@@ -73,42 +78,57 @@ class column_density_plotter:
         ion=None,
         element=None,
         log_scale=True,
+        ax=None,
+        save=True
     ):
 
         name = self._resolve_name(ion, element)
 
-        fig, ax = plt.subplots(figsize=(7, 6))
+        created_fig = False
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(7, 6))
+            created_fig = True
 
-        norm = LogNorm() if log_scale else None
+        vlower = self.cfg.column_density.log_range_2d[0]
+        vhigher = self.cfg.column_density.log_range_2d[1]
+
+        norm = LogNorm(vmin=vlower, vmax=vhigher) if log_scale else None
 
         mesh = ax.imshow(
-                    column_density_values.T,
-                    origin="lower",
-                    extent=[
-                        self.xedges[0], self.xedges[-1],
-                        self.yedges[0], self.yedges[-1],
-                    ],
-                    norm=norm,
-                    aspect="auto",
-                )
+            column_density_values.T,
+            origin="lower",
+            extent=[
+                self.xedges[0], self.xedges[-1],
+                self.yedges[0], self.yedges[-1],
+            ],
+            norm=norm,
+            aspect="auto",
+        )
 
         ax.set_xlabel(rf"x [{self.length_unit}]")
         ax.set_ylabel(rf"y [{self.length_unit}]")
-        ax.set_title(f"Column density of {name} in x-y plane")
+        ax.set_title(f"Column density of {name}")
 
-        cbar = plt.colorbar(mesh, ax=ax)
-        cbar.set_label(rf"$n_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
+        if created_fig:
+            cbar = plt.colorbar(mesh, ax=ax)
+            cbar.set_label(rf"$N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
 
-        plt.tight_layout()
-        #make directory
-        cd_dir=self.output_dir / f"column_density"
-        cd_dir.mkdir(parents=True, exist_ok=True)
-        file_path = cd_dir / f"{name}.png"
-        plt.savefig(file_path, dpi=300, bbox_inches="tight")
-        plt.close()
+        if created_fig and save:
 
-        print("Finished", file_path)
+            plt.tight_layout()
 
+            cd_dir = self.output_dir / "column_density"
+            cd_dir.mkdir(parents=True, exist_ok=True)
+
+            file_path = cd_dir / f"{name}.png"
+
+            plt.savefig(file_path, dpi=300, bbox_inches="tight")
+            plt.close()
+
+            print("Finished", file_path)
+            return
+
+        return ax
 
     def plot_cddf_hist(
         self,
@@ -117,93 +137,61 @@ class column_density_plotter:
         bin_width,
         ion=None,
         element=None,
-        range_plot=None,
-        log_scale=True
+        log_scale=True,
+        ax=None,
+        label=None,
+        save=True
     ):
 
         name = self._resolve_name(ion, element)
 
-        plt.figure(figsize=(7, 6))
+        created_fig = False
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(7, 6))
+            created_fig = True
 
-        plt.bar(bin_centers, cddf, width=bin_width)
-
-        plt.ylabel(r"$\frac{d^2 n}{dN d\chi}$")
-        plt.xlabel(rf"$\log_{{10}}(N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}])$")
-
-        plt.title(f"CDDF of {name}")
-
-        if range_plot is not None:
-            plt.xlim(range_plot[0], range_plot[1])
-
-        plt.tight_layout()
+        cddf = np.asarray(cddf, dtype=float)
 
         if log_scale:
-            plt.yscale("log")
 
-        # Make the directory if it doesn't exist
-        cddf_dir = self.output_dir / "CDDF"
-        cddf_dir.mkdir(parents=True, exist_ok=True)
-        file_path = cddf_dir / f"{name}.png"
-        plt.savefig(file_path, dpi=300, bbox_inches="tight")
-        plt.close()
+            log_cddf = np.full_like(cddf, np.nan)
 
-        print("Finished", file_path)
-    
-    def plot_transverse(
-        self,
-        column_density_values,
-        r_centers,
-        r_widths,
-        ion=None,
-        element=None,
-        log_scale=False,
-        normalize=False
-    ):
-        """
-        Plot 1D radial transverse column density profile.
+            mask = cddf > 0
+            log_cddf[mask] = np.log10(cddf[mask])
 
-        Parameters
-        ----------
-        column_density_values : array
-            Column density profile (already in 1/cm^2, passed as values).
-        r_centers : array
-            Radial bin centers (with length unit already applied).
-        r_err : array (optional)
-            Error bars in radius (half bin width etc.).
-        """
+            ax.scatter(bin_centers, log_cddf, label=label)
 
-        name = self._resolve_name(ion, element)
+            ax.set_ylabel(
+                rf"$\log_{{10}}f(N_{{{name}}}) = "
+                rf"\log_{{10}}\frac{{d^2 n}}{{dN_{{{name}}}\,d\chi}}$"
+            )
 
-        fig, ax = plt.subplots(figsize=(7, 6))
+        else:
 
-        
-        y = np.asarray(column_density_values)
-        x = np.asarray(r_centers)
+            ax.bar(bin_centers, cddf, width=bin_width, label=label)
 
+            ax.set_ylabel(
+                rf"$f(N_{{{name}}}) = \frac{{d^2 n}}{{dN_{{{name}}}\,d\chi}}$"
+            )
 
-        ax.bar(
-            x,
-            y,
-            width=width,
-            align="center",
-            alpha=0.7
-        )
+        ax.set_xlabel(rf"$\log_{{10}}(N_{{{name}}})$")
 
-        ax.set_xlabel(rf"Radius [{self.length_unit}]")
-        
-        ax.set_ylabel(rf"$N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
+        if label is not None:
+            ax.legend()
 
-        ax.set_title(f"Radial transverse profile of {name}")
+        if created_fig and save:
 
-        if log_scale:
-            ax.set_yscale("log")
+            plt.tight_layout()
 
-    
+            cddf_dir = self.output_dir / "CDDF"
+            cddf_dir.mkdir(parents=True, exist_ok=True)
 
-        plt.tight_layout()
+            file_path = cddf_dir / f"{name}.png"
 
-        file_path = self.output_dir / f"radial_transverse/{name}.png"
-        plt.savefig(file_path, dpi=300, bbox_inches="tight")
-        plt.close()
+            plt.savefig(file_path, dpi=300, bbox_inches="tight")
+            plt.close()
 
-        print("Finished", file_path)
+            print("Finished", file_path)
+            return
+
+        return ax

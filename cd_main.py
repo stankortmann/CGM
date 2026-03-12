@@ -2,7 +2,7 @@
 
 import argparse
 import yaml
-from spec_analysis import data_structure as ds
+from spec_analysis.data_structure.simulation as ds
 from spec_analysis.column_density.galaxy_swift import run_halo_column_density
 from spec_analysis.column_density.box_swift import run_box_column_density  
 #for now not importing the box_delta.py, this is not needed for now
@@ -43,6 +43,7 @@ def main():
         monitoring=ds.Monitoring(**cfg_dict['monitoring']),
         window=ds.Window(**cfg_dict['window']),
         chemistry=ds.Chemistry(**cfg_dict['chemistry']),
+        column_density=ds.Column_density(**cfg_dict['column_density']),
         galaxy=ds.Galaxy(**cfg_dict['galaxy'])
     )
 

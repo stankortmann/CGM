@@ -13,6 +13,8 @@ from pathlib import Path
 import pandas
 import swiftsimio as swift
 from swiftsimio import load
+import json
+from spec_analysis import plot
 
 
 
@@ -90,7 +92,7 @@ class unwrapper:
     def load_halo_properties(self):
         return load(self.halo_properties_path)
     
-    
+    """
     def _halo_selection_field(self):
         gal_window=self.cfg.galaxy.galaxy_window
         if gal_window in ["inclusive_sphere", "exclusive_sphere"]:
@@ -103,6 +105,10 @@ class unwrapper:
             return f"{gal_window}_{self.cfg.galaxy.extend_value}{self.cfg.galaxy.extend_unit}_proj{self.cfg.window.projection_axis}"
         else:
             raise ValueError(f"Unknown galaxy window type: {gal_window}")
+    """
+    def _halo_selection_field(self):
+        gal_window=self.cfg.galaxy.galaxy_window
+        return gal_window
 
     # ==========================================================
     # Gas in halo
@@ -185,4 +191,71 @@ class unwrapper:
         return str(path)
 
     
-    
+
+
+class single_cd:
+
+    def __init__(self, hdf5_path):
+
+        self.hdf5_path = hdf5_path
+
+        with h5py.File(hdf5_path, "r") as f:
+
+            # --- read cfg ---
+            self.cfg = json.loads(f.attrs["cfg"])
+
+            # --- read edges ---
+            self.xedges = u.unyt_array(
+                f["xedges"][:],
+                units=f["xedges"].attrs.get("unit", "Mpc")
+            )
+
+            self.yedges = u.unyt_array(
+                f["yedges"][:],
+                units=f["yedges"].attrs.get("unit", "Mpc")
+            )
+
+            # --- element name ---
+            element = self.cfg["chemistry"]["element"]
+            self.element_name = element
+
+            grp_elem = f[element]
+
+            ds_elem = grp_elem["column_density"]
+
+            self.element_cd = u.unyt_array(
+                ds_elem[:],
+                units=ds_elem.attrs.get("unit", "cm**-2")
+            )
+
+            self.element_cddf = grp_elem["cddf"][:]
+            self.element_bin_centers = grp_elem["bin_centers"][:]
+            self.element_bin_width = grp_elem["bin_width"][:]
+
+            # --- ions ---
+            self.ions = {}
+
+            for ion in self.cfg["chemistry"]["ion"]:
+
+                if ion not in f:
+                    continue
+
+                grp = f[ion]
+
+                ds = grp["column_density"]
+
+                self.ions[ion] = {
+
+                    "column_density": u.unyt_array(
+                        ds[:],
+                        units=ds.attrs.get("unit", "cm**-2")
+                    ),
+
+                    "cddf": grp["cddf"][:],
+
+                    "bin_centers": grp["bin_centers"][:],
+
+                    "bin_width": grp["bin_width"][:]
+                }
+
+     

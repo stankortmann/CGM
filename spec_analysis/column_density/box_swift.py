@@ -1,8 +1,11 @@
-# cd_swift.py
+# cd_swift_hdf5.py
 
 from swiftsimio import load
 import numpy as np
 import unyt as u
+from pathlib import Path
+import h5py
+import json
 
 # own modules
 from spec_analysis import unpack_data
@@ -12,27 +15,17 @@ from spec_analysis import plot
 
 def run_box_column_density(cfg):
     """
-    Compute 2D column density and CDDFs for a simulation snapshot.
-    
-    Parameters
-    ----------
-    cfg : Config object
-        The configuration object containing simulation, window, chemistry, etc.
-    
-    Returns
-    -------
-    None
+    Compute 2D column density and CDDFs for a simulation snapshot,
+    and save all results along with cfg settings to an HDF5 file.
     """
-    
     # --- Unpack simulation ---
     data_unpacker = unpack_data.unwrapper(cfg)
     comoving_box_size = data_unpacker.box_size.to("Mpc")
-
+    
     cfg.window.x = [x * comoving_box_size for x in cfg.window.x]
     cfg.window.y = [y * comoving_box_size for y in cfg.window.y]
     cfg.window.z = [z * comoving_box_size for z in cfg.window.z]
 
-    # Projection axis length
     proj_axis = {"x": cfg.window.x, "y": cfg.window.y, "z": cfg.window.z}
     proj_range = proj_axis[cfg.window.projection_axis]
 
@@ -41,7 +34,7 @@ def run_box_column_density(cfg):
     snapshot = data_unpacker.load_snapshot(load_region=region)
     print("Gas particles are loaded")
 
-    # --- Column density class ---
+    # --- Column density calculation ---
     cd_2d = density_profiles.column_density_2d_swift(
         cfg=cfg,
         data_unpacker=data_unpacker,
@@ -49,63 +42,66 @@ def run_box_column_density(cfg):
         element=cfg.chemistry.element
     )
 
-    # --- Plot element column density ---
-    n_element_column_density = cd_2d.element_column_density
-    plotter = plot.column_density_plotter(
-        x_edges=cd_2d.xedges,
-        y_edges=cd_2d.yedges,
-        length_unit="Mpc",
-        data_unpacker=data_unpacker
-    )
+    # --- Prepare HDF5 file ---
+    hdf5_dir = Path(cfg.output_dir) / "hdf5_data"
+    hdf5_dir.mkdir(parents=True, exist_ok=True)
+    hdf5_path = hdf5_dir / f"{cfg.chemistry.element}_column_density.hdf5"
 
-    plotter.plot_xy(
-        column_density_values=n_element_column_density.to_physical().value,
-        element=cfg.chemistry.element,
-        log_scale=True
-    )
+    with h5py.File(hdf5_path, "w") as f:
 
-    # --- CDDF for element ---
-    element_cddf, element_bin_centers, element_bin_width = cd_2d.column_density_distribution_function(
-        ion=None,
-        log_column_density_range=None,
-        n_bins=100,
-        los_range=proj_range
-    )
+        # --- Save cfg as JSON attribute ---
+        cfg_dict = cfg.__dict__  # convert cfg attributes to dict
+        f.attrs['cfg'] = json.dumps(cfg_dict)
 
-    plotter.plot_cddf_hist(
-        cddf=element_cddf,
-        bin_centers=element_bin_centers,
-        bin_width=element_bin_width,
-        element=cfg.chemistry.element,
-        log_scale=True
-    )
+        
+        # Save xedges with units
+        xedges = cd_2d.xedges.to_physical()
+        ds_x = f.create_dataset("xedges", data=xedges.value)
+        ds_x.attrs['unit'] = str(xedges.units)
+        # Save yedges with units
+        yedges = cd_2d.yedges.to_physical()
+        ds_y = f.create_dataset("yedges", data=yedges.value)
+        ds_y.attrs['unit'] = str(yedges.units)
 
-    # --- CDDFs for ions ---
-    for ion in cfg.chemistry.ion:
-        print("Calculating for ion", ion)
-        n_ion_column_density = cd_2d.column_density_ion(ion=ion)
-
-        # Plot 2D column density
-        plotter.plot_xy(
-            column_density_values=n_ion_column_density.to_physical().value,
-            ion=ion,
-            log_scale=True
-        )
-
-        # CDDF
-        ion_cddf, ion_bin_centers, ion_bin_width = cd_2d.column_density_distribution_function(
-            ion=ion,
-            ion_column_density=n_ion_column_density,
+        # --- Save CDDF for element ---
+        element_cddf, element_bin_centers, element_bin_width = cd_2d.column_density_distribution_function(
+            ion=None,
             log_column_density_range=None,
             n_bins=100,
             los_range=proj_range
         )
 
-        plotter.plot_cddf_hist(
-            cddf=ion_cddf,
-            bin_centers=ion_bin_centers,
-            bin_width=ion_bin_width,
-            ion=ion,
-            range_plot=None,
-            log_scale=True
-        )
+        #--- SAVING FOR THE ELEMENT ---
+        grp_elem = f.create_group(f"{cfg.chemistry.element}")
+        # --- Save 2D column density of element ---
+        elem_cd = cd_2d.element_column_density.to_physical()  # keep unyt object
+        ds_elem = grp_elem.create_dataset("column_density", data=elem_cd.value)
+        ds_elem.attrs['unit'] = str(elem_cd.units)  # save units as string
+
+        grp_elem.create_dataset("cddf", data=element_cddf)
+        grp_elem.create_dataset("bin_centers", data=element_bin_centers)
+        grp_elem.create_dataset("bin_width", data=element_bin_width)
+
+        # --- Save ions ---
+        for ion in cfg.chemistry.ion:
+            print("Calculating for ion", ion)
+            n_ion_column_density = cd_2d.column_density_ion(ion=ion).to_physical() 
+
+              # CDDF for ion
+            ion_cddf, ion_bin_centers, ion_bin_width = cd_2d.column_density_distribution_function(
+                ion=ion,
+                ion_column_density=n_ion_column_density,
+                log_column_density_range=None,
+                n_bins=100,
+                los_range=proj_range
+            )
+
+            grp_ion = f.create_group(f"{ion}")
+            ds_ion = grp_ion.create_dataset("column_density", data=n_ion_column_density.value)
+            ds_ion.attrs["unit"] = str(n_ion_column_density.units)
+          
+            grp_ion.create_dataset("cddf", data=ion_cddf)
+            grp_ion.create_dataset("bin_centers", data=ion_bin_centers)
+            grp_ion.create_dataset("bin_width", data=ion_bin_width)
+
+    print("All data and cfg settings saved to", hdf5_path)
