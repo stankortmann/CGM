@@ -56,7 +56,9 @@ class column_density_plotter:
         self.data_unpacker = data_unpacker
         if cfg_plot is not None:
             self.cfg_plot = cfg_plot
-        self.length_unit = self.cfg.column_density.length_unit_2d
+            self.length_unit = self.cfg_plot.length_unit
+        else:
+            self.length_unit = "Mpc" #default value, should be overwritten by cfg_plot if provided
 
         self.xedges = x_edges.to(self.length_unit).value
         self.yedges = y_edges.to(self.length_unit).value
@@ -72,14 +74,15 @@ class column_density_plotter:
 
         raise ValueError("Either ion or element must be provided.")
 
+
+
     def plot_xy(
         self,
         column_density_values,
         ion=None,
         element=None,
         log_scale=True,
-        ax=None,
-        save=True
+        ax=None
     ):
 
         name = self._resolve_name(ion, element)
@@ -89,8 +92,8 @@ class column_density_plotter:
             fig, ax = plt.subplots(figsize=(7, 6))
             created_fig = True
 
-        vlower = self.cfg.column_density.log_range_2d[0]
-        vhigher = self.cfg.column_density.log_range_2d[1]
+        vlower = 10**self.cfg_plot.cd_log_range[0]
+        vhigher = 10**self.cfg_plot.cd_log_range[1]
 
         norm = LogNorm(vmin=vlower, vmax=vhigher) if log_scale else None
 
@@ -113,8 +116,6 @@ class column_density_plotter:
             cbar = plt.colorbar(mesh, ax=ax)
             cbar.set_label(rf"$N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
 
-        if created_fig and save:
-
             plt.tight_layout()
 
             cd_dir = self.output_dir / "column_density"
@@ -126,6 +127,7 @@ class column_density_plotter:
             plt.close()
 
             print("Finished", file_path)
+
             return
 
         return ax
@@ -139,8 +141,7 @@ class column_density_plotter:
         element=None,
         log_scale=True,
         ax=None,
-        label=None,
-        save=True
+        label=None
     ):
 
         name = self._resolve_name(ion, element)
@@ -179,19 +180,5 @@ class column_density_plotter:
         if label is not None:
             ax.legend()
 
-        if created_fig and save:
-
-            plt.tight_layout()
-
-            cddf_dir = self.output_dir / "CDDF"
-            cddf_dir.mkdir(parents=True, exist_ok=True)
-
-            file_path = cddf_dir / f"{name}.png"
-
-            plt.savefig(file_path, dpi=300, bbox_inches="tight")
-            plt.close()
-
-            print("Finished", file_path)
-            return
-
+       
         return ax

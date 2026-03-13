@@ -6,12 +6,48 @@ import unyt as u
 from pathlib import Path
 import h5py
 import json
+from dataclasses import is_dataclass, asdict
+from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
+
 
 # own modules
 from spec_analysis import unpack_data
 from spec_analysis import density_profiles
 from spec_analysis import plot
 
+
+def cfg_to_serializable(cfg):
+    """
+    Recursively convert a dataclass or dict to something JSON serializable.
+    Handles cosmo_array, cosmo_quantity, and cosmo_factor from swiftsimio.
+    """
+    if is_dataclass(cfg):
+        cfg = asdict(cfg)  # convert dataclass to dict recursively
+
+    if isinstance(cfg, dict):
+        return {k: cfg_to_serializable(v) for k, v in cfg.items()}
+
+    elif isinstance(cfg, (list, tuple)):
+        return [cfg_to_serializable(x) for x in cfg]
+
+    # --- SWIFTSIMIO COSMO TYPES ---
+    elif isinstance(cfg, cosmo_array):
+        # Convert to comoving values, then get value and units
+        arr = cfg.to_comoving()  # swiftsimio method
+        return {"value": arr.value.tolist(), "unit": str(arr.units)}
+
+    elif isinstance(cfg, cosmo_quantity):
+        # Single value with units
+        q = cfg.to_comoving()
+        return {"value": float(q), "unit": str(q.units)}
+
+    elif isinstance(cfg, cosmo_factor):
+        # dimensionless scaling factor
+        return float(cfg)
+
+    # --- Fallback ---
+    else:
+        return cfg
 
 def run_box_column_density(cfg):
     """
@@ -35,6 +71,7 @@ def run_box_column_density(cfg):
     print("Gas particles are loaded")
 
     # --- Column density calculation ---
+    print("Calculating for element", cfg.chemistry.element)
     cd_2d = density_profiles.column_density_2d_swift(
         cfg=cfg,
         data_unpacker=data_unpacker,
@@ -43,15 +80,15 @@ def run_box_column_density(cfg):
     )
 
     # --- Prepare HDF5 file ---
-    hdf5_dir = Path(cfg.output_dir) / "hdf5_data"
+    hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data"
     hdf5_dir.mkdir(parents=True, exist_ok=True)
     hdf5_path = hdf5_dir / f"{cfg.chemistry.element}_column_density.hdf5"
 
     with h5py.File(hdf5_path, "w") as f:
 
         # --- Save cfg as JSON attribute ---
-        cfg_dict = cfg.__dict__  # convert cfg attributes to dict
-        f.attrs['cfg'] = json.dumps(cfg_dict)
+        cfg_serializable = cfg_to_serializable(cfg)
+        f.attrs['cfg'] = json.dumps(cfg_serializable)
 
         
         # Save xedges with units
@@ -66,8 +103,8 @@ def run_box_column_density(cfg):
         # --- Save CDDF for element ---
         element_cddf, element_bin_centers, element_bin_width = cd_2d.column_density_distribution_function(
             ion=None,
-            log_column_density_range=None,
-            n_bins=100,
+            log_column_density_range=cfg.cddf.log_range,
+            n_bins=cfg.cddf.bins,
             los_range=proj_range
         )
 
@@ -91,8 +128,8 @@ def run_box_column_density(cfg):
             ion_cddf, ion_bin_centers, ion_bin_width = cd_2d.column_density_distribution_function(
                 ion=ion,
                 ion_column_density=n_ion_column_density,
-                log_column_density_range=None,
-                n_bins=100,
+                log_column_density_range=cfg.cddf.log_range,
+                n_bins=cfg.cddf.bins,
                 los_range=proj_range
             )
 

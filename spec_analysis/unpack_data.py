@@ -15,8 +15,53 @@ import swiftsimio as swift
 from swiftsimio import load
 import json
 from spec_analysis import plot
+from swiftsimio.objects import cosmo_array, cosmo_quantity, cosmo_factor
+from types import SimpleNamespace
+
+def dict_to_namespace(d):
+    """
+    Recursively convert nested dicts into SimpleNamespace
+    so cfg.section.parameter works again.
+    """
+    if isinstance(d, dict):
+        return SimpleNamespace(**{k: dict_to_namespace(v) for k, v in d.items()})
+    elif isinstance(d, list):
+        return [dict_to_namespace(v) for v in d]
+    else:
+        return d
 
 
+
+def cfg_from_serializable(cfg_serialized):
+    """
+    Recursively convert a serialized cfg (dict from JSON) back to
+    cosmo_array, cosmo_quantity, or native Python types with units.
+    
+    Expects dicts of the form:
+        {"value": [...], "unit": "Mpc"}  -> cosmo_array
+        {"value": float, "unit": "cm**-2"} -> cosmo_quantity
+    """
+    if isinstance(cfg_serialized, dict):
+        # Check if this dict represents a cosmo_array/quantity
+        if "value" in cfg_serialized and "unit" in cfg_serialized:
+            val = cfg_serialized["value"]
+            unit = u.Unit(cfg_serialized["unit"])
+            if isinstance(val, list):
+                # It's an array
+                return u.unyt_array(val, unit)
+            else:
+                # Single value
+                return u.unyt_quantity(val, unit)
+        else:
+            # Recurse through dict
+            return {k: cfg_from_serializable(v) for k, v in cfg_serialized.items()}
+
+    elif isinstance(cfg_serialized, list):
+        return [cfg_from_serializable(v) for v in cfg_serialized]
+
+    # Scalars (float, int, str, bool) are returned as is
+    else:
+        return cfg_serialized
 
 
 class unwrapper:
@@ -191,7 +236,7 @@ class unwrapper:
         return str(path)
 
     
-
+### --- WE MIGHT WANNA REDO THE COSMO_ARRAY OVER HERE, NOT QUITE SURE IF I WANT TO STICK TO UNYT RIGHT NOW ---
 
 class single_cd:
 
@@ -202,7 +247,9 @@ class single_cd:
         with h5py.File(hdf5_path, "r") as f:
 
             # --- read cfg ---
-            self.cfg = json.loads(f.attrs["cfg"])
+            cfg_serialized = json.loads(f.attrs["cfg"])
+            cfg_dict = cfg_from_serializable(cfg_serialized)
+            self.cfg = dict_to_namespace(cfg_dict)
 
             # --- read edges ---
             self.xedges = u.unyt_array(
@@ -216,7 +263,7 @@ class single_cd:
             )
 
             # --- element name ---
-            element = self.cfg["chemistry"]["element"]
+            element = self.cfg.chemistry.element
             self.element_name = element
 
             grp_elem = f[element]
@@ -230,12 +277,12 @@ class single_cd:
 
             self.element_cddf = grp_elem["cddf"][:]
             self.element_bin_centers = grp_elem["bin_centers"][:]
-            self.element_bin_width = grp_elem["bin_width"][:]
+            self.element_bin_width = grp_elem["bin_width"] #single constant log spacing of the binwidth
 
             # --- ions ---
             self.ions = {}
 
-            for ion in self.cfg["chemistry"]["ion"]:
+            for ion in self.cfg.chemistry.ion:
 
                 if ion not in f:
                     continue
@@ -255,7 +302,11 @@ class single_cd:
 
                     "bin_centers": grp["bin_centers"][:],
 
-                    "bin_width": grp["bin_width"][:]
+                    "bin_width": grp["bin_width"]
                 }
+    
+
+
+
 
      
