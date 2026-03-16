@@ -32,14 +32,15 @@ class plot_config:
         output_dir_path = data_dir_path / self.output_directory
         output_dir_path.mkdir(parents=True, exist_ok=True)
 
-    def get_hdf5_files(self) -> List[Path]:
+    @property
+    def data_files(self) -> List[Path]:
         """
         Return a list of HDF5 files to plot.
         If hdf5_files is set, use those, else scan the data_directory.
         """
         if self.hdf5_files:
             # Use the provided filenames
-            files = [Path(f) for f in self.hdf5_files]
+            files = [Path(self.data_directory)/Path(self.output_directory) / f for f in self.hdf5_files]
             for f in files:
                 if not f.exists():
                     raise FileNotFoundError(f"HDF5 file does not exist: {f}")

@@ -46,14 +46,14 @@ def main():
     cfg_plot = load_cfg_plot(args.config)
 
     # --- Get list of HDF5 files ---
-    hdf5_files = cfg_plot.get_hdf5_files()
+    data_files = cfg_plot.data_files
 
     # --- Decide whether to run single or multiple ---
-    if len(hdf5_files) == 1:
-        print(f"Replotting single HDF5: {hdf5_files[0]}")
+    if len(data_files) == 1:
+        print(f"Replotting single HDF5: {data_files[0]}")
         replot.run_single(cfg_plot)
     else:
-        print(f"Replotting multiple HDF5 files: {[str(f) for f in hdf5_files]}")
+        print(f"Replotting multiple HDF5 files: {[str(f) for f in data_files]}")
         replot.run_multiple(cfg_plot)
 
 

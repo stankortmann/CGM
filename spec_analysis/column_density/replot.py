@@ -5,6 +5,7 @@ from pathlib import Path
 from spec_analysis.unpack_data import single_cd, unwrapper
 from spec_analysis import plot  # your column_density_plotter class
 from spec_analysis.data_structure.plot import plot_config
+import numpy as np
 
 
 def get_label(cd_data,data_unpacker,selection_criterium):
@@ -15,10 +16,10 @@ def get_label(cd_data,data_unpacker,selection_criterium):
         return f"z= {data_unpacker.redshift:.2f}"
     elif selection_criterium == "scale_factor":
         return f"a= {data_unpacker.scale_factor:.3f}"
-    elif selection_criterium == "resolution_particles":
+    elif selection_criterium == "particle_resolution":
         return f"m: {cd_data.cfg.simulation.resolution}"
-    elif selection_criterium == "resolution_pixels":
-        return f"Log pixel number: {np.log10(cd_data.cfg.simulation.resolution**2)}"
+    elif selection_criterium == "pixel_resolution":
+        return rf"Pixel number: ${cd_data.cfg.window.resolution}^2$"
     elif selection_criterium == "simulation_name":
         return f"L{cd_data.cfg.simulation.box_length:03d}_m{cd_data.cfg.simulation.resolution}_{cd_data.cfg.simulation.name}"
     #can add more criteria here as needed
@@ -59,9 +60,9 @@ def plot_eagle_cddf(ax, ion, cfg_plot):
 
 def run_single(cfg_plot: plot_config):
 
-    hdf5_file = Path(cfg_plot.hdf5_files[0])
+    data_file = Path(cfg_plot.data_files[0])
 
-    cd_data = single_cd(hdf5_file)
+    cd_data = single_cd(data_file)
     data_unpacker = unwrapper(cd_data.cfg)
 
     plotter = plot.column_density_plotter(
@@ -140,7 +141,7 @@ def run_single(cfg_plot: plot_config):
 
         print("Saved", file_path)
 
-    print(f"Finished replotting single HDF5: {hdf5_file}")
+    print(f"Finished replotting single HDF5: {data_file}")
 
 
 def run_multiple(cfg_plot):
@@ -158,11 +159,11 @@ def run_multiple(cfg_plot):
     element_ax_dict = {}
     ion_ax_dict = {}
 
-    for hdf5_file in cfg_plot.hdf5_files:
-        hdf5_file = Path(hdf5_file)
+    for data_file in cfg_plot.data_files:
+        data_file = Path(data_file)
 
         # --- Load HDF5 data ---
-        cd_data = single_cd(hdf5_file)
+        cd_data = single_cd(data_file)
         data_unpacker = unwrapper(cd_data.cfg)
 
         # --- Initialize plotter ---
@@ -173,7 +174,8 @@ def run_multiple(cfg_plot):
             y_edges=cd_data.yedges,
             cfg_plot=cfg_plot
         )
-
+        # this is the label for this particular data_file, based on the selection criterion
+        label = get_label(cd_data, data_unpacker, cfg_plot.label_criterion)
         # --- Element CDDF ---
         ax_elem = element_ax_dict.get(cd_data.element_name)
         ax_elem = plotter.plot_cddf_hist(
@@ -181,7 +183,7 @@ def run_multiple(cfg_plot):
             bin_centers=cd_data.element_bin_centers,
             bin_width=cd_data.element_bin_width,
             element=cd_data.element_name,
-            label=cfg_plot.label_criterion,
+            label=label,
             log_scale=True,
             ax=ax_elem
         )
@@ -200,7 +202,7 @@ def run_multiple(cfg_plot):
                 bin_centers=cd_data.ions[ion]["bin_centers"],
                 bin_width=cd_data.ions[ion]["bin_width"],
                 ion=ion,
-                label=cfg_plot.label_criterion,
+                label=label,
                 log_scale=True,
                 ax=ax_ion
             )
