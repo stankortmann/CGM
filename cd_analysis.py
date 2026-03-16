@@ -2,9 +2,13 @@
 
 import argparse
 import yaml
+from mpi4py import MPI
 import spec_analysis.data_structure.simulation as ds
 from spec_analysis.column_density.galaxy_swift import run_halo_column_density
 from spec_analysis.column_density.box_swift import run_box_column_density  
+from spec_analysis.column_density.box_mpi import run_box_column_density_parallel
+from pathlib import Path
+import h5py
 #for now not importing the box_delta.py, this is not needed for now
 
 
@@ -31,7 +35,8 @@ def main():
         help="Path to YAML configuration file"
     )
     args = parser.parse_args()
-
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
     # --- Load YAML ---
     with open(args.config, "r") as f:
         cfg_dict = yaml.safe_load(f)
@@ -48,16 +53,22 @@ def main():
     )
 
     # --- Print all config parameters ---
-    print("Configuration parameters and values:")
-    print_cfg(cfg)
+    if rank == 0:
+        print("Configuration parameters and values:")
+        print_cfg(cfg)
 
     # --- Decide which function to call ---
     if getattr(cfg.galaxy, "single_galaxy", False):
-        print("\nRunning single-galaxy column density analysis...")
+        print("\nRunning single-galaxy column density analysis...") if rank == 0 else None
         run_halo_column_density(cfg)
     else:
-        print("\nRunning full box column density analysis...")
-        run_box_column_density(cfg)
+        print("\nRunning full box column density analysis...") if rank == 0 else None
+        if comm.Get_rank() != 0:
+            print(f"Running in parallel with {comm.Get_size()} cores.") if rank == 0 else None
+            run_box_column_density_parallel(cfg, comm)
+        else:
+            print(f"Running on a single core.")
+            run_box_column_density(cfg)
 
 
 if __name__ == "__main__":

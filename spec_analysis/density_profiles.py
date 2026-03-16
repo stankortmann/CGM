@@ -229,22 +229,25 @@ class column_density_2d_swift:
     """
 
     def __init__(self, cfg, data_unpacker, 
-            element, snapshot=None,gas_particles=None, halo=None):
+            element, snapshot=None,gas_particles=None, halo=None,mpi=False):
         
         
         self.cfg = cfg
         self.cosmo=cosmo.cosmo_tools(data_unpacker=data_unpacker,cfg=cfg)
         
         #full snapshot
-        if snapshot is not None and halo is None:
+        if snapshot is not None and halo is None and not mpi:
             self.snapshot=snapshot
             self.periodic=True
-            
-        #single galaxy
-        elif snapshot is None and halo is not None:
+
+       
+        #single galaxy 
+        elif snapshot is None and halo is not None :
             self.snapshot=halo.snapshot
             self.halo=halo #contains all the info of the galaxy like half mass radius etc.
             self.periodic=False
+
+        
 
         elif snapshot is None and halo is None:
             print("ERROR: No gas particles received.")
@@ -252,6 +255,11 @@ class column_density_2d_swift:
         elif snapshot is not None and halo is not None:
             print("ERROR: Single halo and full box particles received.")
             exit()
+        if mpi:
+            self.threader=False #we will use MPI parallelisation, not threading
+        else:
+            self.threader=True #use threading for projection parallelisation, not MPI
+            
         #connect gas_particles to the full snapshot to enable project_gas function
         self.gas_particles = self.snapshot.gas
         self.element = element
@@ -373,7 +381,7 @@ class column_density_2d_swift:
             project="element_number",
             resolution=self.cfg.window.resolution,
             region=self.projection_range,
-            parallel=True,
+            parallel=self.threader,
             periodic=self.periodic,
         )
         projection = scale_projection*scale
@@ -418,7 +426,7 @@ class column_density_2d_swift:
             project=name_ion,
             resolution=self.cfg.window.resolution,
             region=self.projection_range,
-            parallel=True,
+            parallel=self.threader,
             periodic=self.periodic,
         )
         projection=scale_projection*scale
