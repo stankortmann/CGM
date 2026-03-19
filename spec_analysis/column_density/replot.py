@@ -130,11 +130,16 @@ def run_single(cfg_plot: plot_config):
         # --- CDDF single plotting inside the original data directory ---
         ax = plot_eagle_cddf(ax, ion, cfg_plot)
 
-        ax.legend()
+        
 
         plt.tight_layout()
 
         file_path = output_dir / f"CDDF/{ion}.png"
+        file_path = output_dir / f"CDDF/{ion}.png"
+
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+
         ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
 
         plt.close(ax.figure)
@@ -214,7 +219,9 @@ def run_multiple(cfg_plot):
     output_dir = Path(cfg_plot.data_directory) /cfg_plot.output_directory / f"CDDF_{cfg_plot.label_criterion}"
     output_dir.mkdir(parents=True, exist_ok=True)
     for element_name, ax in element_ax_dict.items():
-        ax.tight_layout()
+        ax.legend()
+        ax.set_title(f"CDDF of {element_name}")
+        plt.tight_layout()
         file_path = output_dir / f"{element_name}.png"
         ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close(ax.figure)
@@ -225,7 +232,8 @@ def run_multiple(cfg_plot):
         # Overlay EAGLE data if requested
         ax = plot_eagle_cddf(ax, ion_name, cfg_plot)
         ax.legend()
-        ax.tight_layout()
+        ax.set_title(f"CDDF of {ion_name}")
+        plt.tight_layout()
         file_path = output_dir / f"{ion_name}.png"
         ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close(ax.figure)

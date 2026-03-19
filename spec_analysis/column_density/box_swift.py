@@ -15,6 +15,16 @@ from spec_analysis import unpack_data
 from spec_analysis import density_profiles
 from spec_analysis import plot
 
+# function
+def create_dataset_compressed(group, name, data, dtype=np.float64):
+    return group.create_dataset(
+        name,
+        data=data.astype(dtype), #maybe go to float32 to save space? but be careful with precision loss!
+        chunks=True,
+        compression="gzip",
+        compression_opts=6,
+        shuffle=True
+    )
 
 def cfg_to_serializable(cfg):
     """
@@ -83,62 +93,62 @@ def run_box_column_density(cfg):
     hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data"
     hdf5_dir.mkdir(parents=True, exist_ok=True)
     hdf5_path = hdf5_dir / f"{cfg.chemistry.element}_column_density.hdf5"
-
+    
     with h5py.File(hdf5_path, "w") as f:
 
         # --- Save cfg as JSON attribute ---
         cfg_serializable = cfg_to_serializable(cfg)
         f.attrs['cfg'] = json.dumps(cfg_serializable)
 
-        
-        # Save xedges with units
+        # --- Save xedges with units ---
         xedges = cd_2d.xedges.to_physical()
-        ds_x = f.create_dataset("xedges", data=xedges.value)
+        ds_x = create_dataset_compressed(f, "xedges", xedges.value)
         ds_x.attrs['unit'] = str(xedges.units)
-        # Save yedges with units
+
+        # --- Save yedges with units ---
         yedges = cd_2d.yedges.to_physical()
-        ds_y = f.create_dataset("yedges", data=yedges.value)
+        ds_y = create_dataset_compressed(f, "yedges", yedges.value)
         ds_y.attrs['unit'] = str(yedges.units)
 
         # --- Save CDDF for element ---
         element_cddf, element_bin_centers, element_bin_width = cd_2d.column_density_distribution_function(
-            ion=None,
+            column_density=cd_2d.element_column_density,
             log_column_density_range=cfg.cddf.log_range,
             n_bins=cfg.cddf.bins,
             los_range=proj_range
         )
 
-        #--- SAVING FOR THE ELEMENT ---
+        # --- SAVING FOR THE ELEMENT ---
         grp_elem = f.create_group(f"{cfg.chemistry.element}")
-        # --- Save 2D column density of element ---
-        elem_cd = cd_2d.element_column_density.to_physical()  # keep unyt object
-        ds_elem = grp_elem.create_dataset("column_density", data=elem_cd.value)
-        ds_elem.attrs['unit'] = str(elem_cd.units)  # save units as string
 
-        grp_elem.create_dataset("cddf", data=element_cddf)
-        grp_elem.create_dataset("bin_centers", data=element_bin_centers)
+        elem_cd = cd_2d.element_column_density.to_physical()
+        ds_elem = create_dataset_compressed(grp_elem, "column_density", elem_cd.value)
+        ds_elem.attrs['unit'] = str(elem_cd.units)
+
+        create_dataset_compressed(grp_elem, "cddf", element_cddf)
+        create_dataset_compressed(grp_elem, "bin_centers", element_bin_centers)
         grp_elem.create_dataset("bin_width", data=element_bin_width)
 
         # --- Save ions ---
         for ion in cfg.chemistry.ion:
             print("Calculating for ion", ion)
-            n_ion_column_density = cd_2d.column_density_ion(ion=ion).to_physical() 
 
-              # CDDF for ion
+            n_ion_column_density = cd_2d.column_density_ion(ion=ion).to_physical()
+
             ion_cddf, ion_bin_centers, ion_bin_width = cd_2d.column_density_distribution_function(
-                ion=ion,
-                ion_column_density=n_ion_column_density,
+                column_density=n_ion_column_density,
                 log_column_density_range=cfg.cddf.log_range,
                 n_bins=cfg.cddf.bins,
                 los_range=proj_range
             )
 
             grp_ion = f.create_group(f"{ion}")
-            ds_ion = grp_ion.create_dataset("column_density", data=n_ion_column_density.value)
+
+            ds_ion = create_dataset_compressed(grp_ion, "column_density", n_ion_column_density.value)
             ds_ion.attrs["unit"] = str(n_ion_column_density.units)
-          
-            grp_ion.create_dataset("cddf", data=ion_cddf)
-            grp_ion.create_dataset("bin_centers", data=ion_bin_centers)
+
+            create_dataset_compressed(grp_ion, "cddf", ion_cddf)
+            create_dataset_compressed(grp_ion, "bin_centers", ion_bin_centers)
             grp_ion.create_dataset("bin_width", data=ion_bin_width)
 
     print("All data and cfg settings saved to", hdf5_path)

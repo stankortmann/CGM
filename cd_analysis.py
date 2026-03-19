@@ -35,8 +35,15 @@ def main():
         help="Path to YAML configuration file"
     )
     args = parser.parse_args()
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
+    try:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        if size == 1:
+            comm = None
+    except ImportError:
+        comm = None
     # --- Load YAML ---
     with open(args.config, "r") as f:
         cfg_dict = yaml.safe_load(f)
@@ -63,8 +70,8 @@ def main():
         run_halo_column_density(cfg)
     else:
         print("\nRunning full box column density analysis...") if rank == 0 else None
-        if comm.Get_rank() != 0:
-            print(f"Running in parallel with {comm.Get_size()} cores.") if rank == 0 else None
+        if comm is not None and size > 1:
+            print(f"Running in parallel with {size} cores.") if rank == 0 else None
             run_box_column_density_parallel(cfg, comm)
         else:
             print(f"Running on a single core.")

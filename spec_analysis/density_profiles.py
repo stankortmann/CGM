@@ -236,7 +236,7 @@ class column_density_2d_swift:
         self.cosmo=cosmo.cosmo_tools(data_unpacker=data_unpacker,cfg=cfg)
         
         #full snapshot
-        if snapshot is not None and halo is None and not mpi:
+        if snapshot is not None and halo is None:
             self.snapshot=snapshot
             self.periodic=True
 
@@ -434,17 +434,13 @@ class column_density_2d_swift:
     
     def column_density_distribution_function(
         self,
-        ion=None,
-        ion_column_density=None,
+        column_density=None,
         log_column_density_range=None,
         n_bins=100,
         los_range=[0,1], #projection axis length, still comoving
         ):
-
-        if ion is None:
-            cd = self.element_column_density.to_physical()
-        else: #this is already physical as the projection function returns physical units, but we want to be sure
-            cd = ion_column_density.to_physical()
+        
+        cd=column_density.to_physical() #just to be sure
         
         
         values = cd.value.flatten()
