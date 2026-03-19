@@ -2,7 +2,6 @@
 
 import argparse
 import yaml
-from mpi4py import MPI
 import spec_analysis.data_structure.simulation as ds
 from spec_analysis.column_density.galaxy_swift import run_halo_column_density
 from spec_analysis.column_density.box_swift import run_box_column_density  

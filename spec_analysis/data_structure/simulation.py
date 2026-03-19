@@ -32,6 +32,7 @@ class Window:
     y: List[float]
     z: List[float]
     projection_axis: str
+    projection_slices: int
     resolution: int
     z_center: float
     z_range: List[float]

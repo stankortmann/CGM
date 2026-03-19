@@ -156,16 +156,17 @@ def run_box_column_density_parallel(cfg, comm):
     iy_min = iy * ny // n_tile
     iy_max = (iy + 1) * ny // n_tile
 
-    mask = np.zeros((ny, nx), dtype=bool)
-    mask[iy_min:iy_max, ix_min:ix_max] = True
-    print(f"Rank {comm_rank} shape of tile is {(iy_max-iy_min, ix_max-ix_min)}, mask sum is {mask.sum()}, shape of mask is {mask[mask].shape}")
-
+    # Column density arrays are indexed as (x, y).
+    mask = np.zeros((nx, ny), dtype=bool)
+    mask[ix_min:ix_max, iy_min:iy_max] = True
+    print(f"Rank {comm_rank} indices of core region: ix [{ix_min}:{ix_max}], iy [{iy_min}:{iy_max}]")
+    
     # Apply mask
     local_element[~mask] = 0.0
 
     for ion in cfg.chemistry.ion:
         local_ions[ion][~mask] = 0.0
-
+    
     # -------------------------------------------------
     # MPI SUM REDUCTION (ALL RANKS HAVE FULL GRID, JUST SUMMING)
     # -------------------------------------------------
