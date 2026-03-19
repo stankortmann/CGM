@@ -4,107 +4,13 @@ from swiftsimio import load
 import numpy as np
 import unyt as u
 from pathlib import Path
-import h5py
-import json
-from dataclasses import is_dataclass, asdict
-from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
+from swiftsimio.objects import cosmo_array
 from mpi4py import MPI
 
 # own modules
 from spec_analysis import unpack_data
 from spec_analysis import density_profiles
-from spec_analysis import plot
-
-
-
-
-
-
-def cfg_to_serializable(cfg):
-    """
-    Recursively convert a dataclass or dict to something JSON serializable.
-    Handles cosmo_array, cosmo_quantity, and cosmo_factor from swiftsimio.
-    """
-
-    if is_dataclass(cfg):
-        cfg = asdict(cfg)
-
-    if isinstance(cfg, dict):
-        return {k: cfg_to_serializable(v) for k, v in cfg.items()}
-
-    elif isinstance(cfg, (list, tuple)):
-        return [cfg_to_serializable(x) for x in cfg]
-
-    elif isinstance(cfg, cosmo_array):
-        arr = cfg.to_comoving()
-        return {"value": arr.value.tolist(), "unit": str(arr.units)}
-
-    elif isinstance(cfg, cosmo_quantity):
-        q = cfg.to_comoving()
-        return {"value": float(q), "unit": str(q.units)}
-
-    elif isinstance(cfg, cosmo_factor):
-        return float(cfg)
-
-    else:
-        return cfg
-
-def save_projection_file(file_path, cd_2d_obj, element_column_density, ion_column_density_map, los_range_local):
-    los_distance_local = (los_range_local[1] - los_range_local[0]).to("Mpc").to_physical()
-
-    with h5py.File(file_path, "w") as f:
-        f.attrs['cfg'] = json.dumps(cfg_serializable)
-
-        ds_x = f.create_dataset("xedges", data=xedges_physical.value)
-        ds_x.attrs['unit'] = str(xedges_physical.units)
-
-        ds_y = f.create_dataset("yedges", data=yedges_physical.value)
-        ds_y.attrs['unit'] = str(yedges_physical.units)
-
-        proj_vals = np.array([los_range_local[0].to_physical().value, los_range_local[1].to_physical().value])
-        ds_proj = f.create_dataset("proj_range", data=proj_vals)
-        ds_proj.attrs['unit'] = str(los_range_local[0].to_physical().units)
-
-        ds_los = f.create_dataset("los_distance", data=los_distance_local.value)
-        ds_los.attrs['unit'] = str(los_distance_local.units)
-
-        ds_zmin = f.create_dataset("z_min", data=los_range_local[0].to_physical().value)
-        ds_zmin.attrs['unit'] = str(los_range_local[0].to_physical().units)
-
-        ds_zmax = f.create_dataset("z_max", data=los_range_local[1].to_physical().value)
-        ds_zmax.attrs['unit'] = str(los_range_local[1].to_physical().units)
-
-        element_cddf, element_bin_centers, element_bin_width = cd_2d_obj.column_density_distribution_function(
-            column_density=element_column_density,
-            log_column_density_range=cfg.cddf.log_range,
-            n_bins=cfg.cddf.bins,
-            los_range=los_range_local
-        )
-
-        grp_elem = f.create_group(f"{cfg.chemistry.element}")
-        ds_elem = grp_elem.create_dataset("column_density", data=element_column_density.value)
-        ds_elem.attrs['unit'] = str(element_column_density.units)
-        grp_elem.create_dataset("cddf", data=element_cddf)
-        grp_elem.create_dataset("bin_centers", data=element_bin_centers)
-        grp_elem.create_dataset("bin_width", data=element_bin_width)
-
-        for ion in cfg.chemistry.ion:
-            print("Calculating for ion", ion)
-            n_ion_column_density = ion_column_density_map[ion]
-
-            ion_cddf, ion_bin_centers, ion_bin_width = cd_2d_obj.column_density_distribution_function(
-                column_density=n_ion_column_density,
-                log_column_density_range=cfg.cddf.log_range,
-                n_bins=cfg.cddf.bins,
-                los_range=los_range_local
-            )
-
-            grp_ion = f.create_group(f"{ion}")
-            ds_ion = grp_ion.create_dataset("column_density", data=n_ion_column_density.value)
-            ds_ion.attrs["unit"] = str(n_ion_column_density.units)
-            grp_ion.create_dataset("cddf", data=ion_cddf)
-            grp_ion.create_dataset("bin_centers", data=ion_bin_centers)
-            grp_ion.create_dataset("bin_width", data=ion_bin_width)
+from spec_analysis import save_data
 
 
 
@@ -174,7 +80,6 @@ def run_box_column_density_parallel(cfg, comm):
     hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data"
     hdf5_dir.mkdir(parents=True, exist_ok=True)
 
-    cfg_serializable = cfg_to_serializable(cfg)
     full_z_min = z_min
     full_z_max = z_max
     dz = (z_max - z_min) / n_slices
@@ -259,8 +164,6 @@ def run_box_column_density_parallel(cfg, comm):
         if total_element is None:
             total_element = n_element_column_density.copy()
             total_ions = {ion: full_ions[ion].copy() for ion in cfg.chemistry.ion}
-            xedges_physical = cd_2d.xedges.to_physical()
-            yedges_physical = cd_2d.yedges.to_physical()
             cd_2d_ref = cd_2d
         else:
             total_element += n_element_column_density
@@ -268,12 +171,14 @@ def run_box_column_density_parallel(cfg, comm):
                 total_ions[ion] += full_ions[ion]
 
         slice_hdf5_path = hdf5_dir / f"slice_{i_slice}.hdf5"
-        save_projection_file(
+        save_data.save_projection_file(
             file_path=slice_hdf5_path,
+            cfg=cfg,
             cd_2d_obj=cd_2d,
             element_column_density=n_element_column_density,
             ion_column_density_map=full_ions,
             los_range_local=slice_proj_range,
+            use_compression=True,
         )
 
         print("All data and cfg settings saved to", slice_hdf5_path)
@@ -282,12 +187,14 @@ def run_box_column_density_parallel(cfg, comm):
         return
 
     total_hdf5_path = hdf5_dir / "total.hdf5"
-    save_projection_file(
+    save_data.save_projection_file(
         file_path=total_hdf5_path,
+        cfg=cfg,
         cd_2d_obj=cd_2d_ref,
         element_column_density=total_element,
         ion_column_density_map=total_ions,
         los_range_local=[full_z_min, full_z_max],
+        use_compression=True,
     )
 
     print("All data and cfg settings saved to", total_hdf5_path)

@@ -4,50 +4,14 @@ from swiftsimio import load
 import numpy as np
 import unyt as u
 from pathlib import Path
-import h5py
-import json
-from dataclasses import is_dataclass, asdict
-from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
+from swiftsimio.objects import cosmo_array
 from mpi4py import MPI
 
 # own modules
 from spec_analysis import unpack_data
 from spec_analysis import density_profiles
 from spec_analysis import plot
-
-
-
-
-
-
-def cfg_to_serializable(cfg):
-    """
-    Recursively convert a dataclass or dict to something JSON serializable.
-    Handles cosmo_array, cosmo_quantity, and cosmo_factor from swiftsimio.
-    """
-
-    if is_dataclass(cfg):
-        cfg = asdict(cfg)
-
-    if isinstance(cfg, dict):
-        return {k: cfg_to_serializable(v) for k, v in cfg.items()}
-
-    elif isinstance(cfg, (list, tuple)):
-        return [cfg_to_serializable(x) for x in cfg]
-
-    elif isinstance(cfg, cosmo_array):
-        arr = cfg.to_comoving()
-        return {"value": arr.value.tolist(), "unit": str(arr.units)}
-
-    elif isinstance(cfg, cosmo_quantity):
-        q = cfg.to_comoving()
-        return {"value": float(q), "unit": str(q.units)}
-
-    elif isinstance(cfg, cosmo_factor):
-        return float(cfg)
-
-    else:
-        return cfg
+from spec_analysis import save_data
 
 
 def run_box_column_density_parallel(cfg, comm):
@@ -129,8 +93,6 @@ def run_box_column_density_parallel(cfg, comm):
         mpi=True
     )
 
-    resolution = cfg.window.resolution
-
     # IMPORTANT:
     # Do NOT slice. Keep full grid.
     local_element = cd_2d.element_column_density.to_physical()
@@ -195,65 +157,19 @@ def run_box_column_density_parallel(cfg, comm):
             cosmo_factor=local_ions[ion].cosmo_factor,
         )
 
-    # -------------------------------------------------
-    # ORIGINAL SAVING CODE
-    # -------------------------------------------------
-
     hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data"
     hdf5_dir.mkdir(parents=True, exist_ok=True)
 
     hdf5_path = hdf5_dir / f"{cfg.chemistry.element}_column_density.hdf5"
 
-    with h5py.File(hdf5_path, "w") as f:
-
-        cfg_serializable = cfg_to_serializable(cfg)
-        f.attrs['cfg'] = json.dumps(cfg_serializable)
-
-        xedges = cd_2d.xedges.to_physical()
-        ds_x = f.create_dataset("xedges", data=xedges.value)
-        ds_x.attrs['unit'] = str(xedges.units)
-
-        yedges = cd_2d.yedges.to_physical()
-        ds_y = f.create_dataset("yedges", data=yedges.value)
-        ds_y.attrs['unit'] = str(yedges.units)
-
-        element_cddf, element_bin_centers, element_bin_width = cd_2d.column_density_distribution_function(
-            column_density=n_element_column_density,
-            log_column_density_range=cfg.cddf.log_range,
-            n_bins=cfg.cddf.bins,
-            los_range=proj_range
-        )
-
-        grp_elem = f.create_group(f"{cfg.chemistry.element}")
-
-        
-        ds_elem = grp_elem.create_dataset("column_density", data=n_element_column_density.value)
-        ds_elem.attrs['unit'] = str(n_element_column_density.units)
-
-        grp_elem.create_dataset("cddf", data=element_cddf)
-        grp_elem.create_dataset("bin_centers", data=element_bin_centers)
-        grp_elem.create_dataset("bin_width", data=element_bin_width)
-
-        for ion in cfg.chemistry.ion:
-
-            print("Calculating for ion", ion)
-
-            n_ion_column_density = full_ions[ion]
-
-            ion_cddf, ion_bin_centers, ion_bin_width = cd_2d.column_density_distribution_function(
-                column_density=n_ion_column_density,
-                log_column_density_range=cfg.cddf.log_range,
-                n_bins=cfg.cddf.bins,
-                los_range=proj_range
-            )
-
-            grp_ion = f.create_group(f"{ion}")
-
-            ds_ion = grp_ion.create_dataset("column_density", data=n_ion_column_density.value)
-            ds_ion.attrs["unit"] = str(n_ion_column_density.units)
-
-            grp_ion.create_dataset("cddf", data=ion_cddf)
-            grp_ion.create_dataset("bin_centers", data=ion_bin_centers)
-            grp_ion.create_dataset("bin_width", data=ion_bin_width)
+    save_data.save_projection_file(
+        file_path=hdf5_path,
+        cfg=cfg,
+        cd_2d_obj=cd_2d,
+        element_column_density=n_element_column_density,
+        ion_column_density_map=full_ions,
+        los_range_local=proj_range,
+        use_compression=True,
+    )
 
     print("All data and cfg settings saved to", hdf5_path)
