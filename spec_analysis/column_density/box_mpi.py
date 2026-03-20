@@ -14,12 +14,25 @@ from spec_analysis import plot
 from spec_analysis import save_data
 
 
+def _assemble_global_from_tiles(tile_maps, n_tile, tile_res, full_res):
+    """Stitch rank-local (x, y) tile maps into one global map on root."""
+    full_map = np.zeros((full_res, full_res), dtype=tile_maps[0].dtype)
+    for rank_id, tile_map in enumerate(tile_maps):
+        ix = rank_id % n_tile
+        iy = rank_id // n_tile
+        ix_min = ix * tile_res
+        ix_max = (ix + 1) * tile_res
+        iy_min = iy * tile_res
+        iy_max = (iy + 1) * tile_res
+        full_map[ix_min:ix_max, iy_min:iy_max] = tile_map
+    return full_map
+
+
 def run_box_column_density_parallel(cfg, comm):
     """
-    Compute 2D column density and CDDFs using:
-    - identical global projection grid on all ranks
-    - tile-based masking
-    - MPI SUM reduction (no stitching)
+    Compute 2D column density using:
+    - rank-local tile projections to minimize per-rank memory
+    - MPI gather and stitch to assemble global map on root
     """
 
     comm_rank = comm.Get_rank()
@@ -53,6 +66,9 @@ def run_box_column_density_parallel(cfg, comm):
         if comm_rank == 0:
             raise RuntimeError("MPI ranks must be a perfect square")
 
+    global_resolution = int(cfg.window.resolution)
+    tile_resolution = global_resolution // n_tile
+
     ix = comm_rank % n_tile
     iy = comm_rank // n_tile
 
@@ -62,11 +78,11 @@ def run_box_column_density_parallel(cfg, comm):
     # Overlap ONLY for particle loading
     overlap = getattr(cfg.window, "tile_overlap", 0.01) * comoving_box_size
 
-    tile_x = [x_min + ix * dx - overlap,
-              x_min + (ix + 1) * dx + overlap]
+    core_x = [x_min + ix * dx, x_min + (ix + 1) * dx]
+    core_y = [y_min + iy * dy, y_min + (iy + 1) * dy]
 
-    tile_y = [y_min + iy * dy - overlap,
-              y_min + (iy + 1) * dy + overlap]
+    tile_x = [core_x[0] - overlap, core_x[1] + overlap]
+    tile_y = [core_y[0] - overlap, core_y[1] + overlap]
 
     tile_z = [z_min, z_max]
 
@@ -82,65 +98,89 @@ def run_box_column_density_parallel(cfg, comm):
         print("Gas particles loaded (MPI tiled)")
 
     # -------------------------------------------------
-    # COLUMN DENSITY PROJECTION (FULL GLOBAL GRID)
+    # COLUMN DENSITY PROJECTION (LOCAL TILE ONLY)
     # -------------------------------------------------
 
-    cd_2d = density_profiles.column_density_2d_swift(
-        cfg=cfg,
-        data_unpacker=data_unpacker,
-        snapshot=snapshot,
-        element=cfg.chemistry.element,
-        mpi=True
-    )
+    original_x = cfg.window.x
+    original_y = cfg.window.y
+    original_resolution = cfg.window.resolution
 
-    # IMPORTANT:
-    # Do NOT slice. Keep full grid.
-    local_element = cd_2d.element_column_density.to_physical()
+    try:
+        # Compute only the rank-local tile map to avoid full-grid memory on each rank.
+        cfg.window.x = core_x
+        cfg.window.y = core_y
+        cfg.window.resolution = tile_resolution
 
-    local_ions = {}
+        cd_2d = density_profiles.column_density_2d_swift(
+            cfg=cfg,
+            data_unpacker=data_unpacker,
+            snapshot=snapshot,
+            element=cfg.chemistry.element,
+            mpi=True
+        )
+
+        local_element = cd_2d.element_column_density.to_physical()
+
+        local_ions = {}
+        for ion in cfg.chemistry.ion:
+            local_ions[ion] = cd_2d.column_density_ion(ion).to_physical()
+    finally:
+        cfg.window.x = original_x
+        cfg.window.y = original_y
+        cfg.window.resolution = original_resolution
+
+    if comm_rank == 0:
+        print("Local tile histograms computed")
+
+    # -------------------------------------------------
+    # GATHER TILES AND ASSEMBLE ON ROOT
+    # -------------------------------------------------
+
+    gathered_element = comm.gather(np.ascontiguousarray(local_element.value), root=0)
+
+    gathered_ions = {}
     for ion in cfg.chemistry.ion:
-        local_ions[ion] = cd_2d.column_density_ion(ion).to_physical()
-
-    # -------------------------------------------------
-    # TILE MASK (ZERO OUTSIDE CORE REGION)
-    # -------------------------------------------------
-
-    # global grid edges (identical on all ranks)
-    x_edges = cd_2d.xedges.to_comoving()
-    y_edges = cd_2d.yedges.to_comoving()
-
-    nx = len(x_edges) - 1
-    ny = len(y_edges) - 1
-
-    ix_min = ix * nx // n_tile
-    ix_max = (ix + 1) * nx // n_tile
-
-    iy_min = iy * ny // n_tile
-    iy_max = (iy + 1) * ny // n_tile
-
-    # Column density arrays are indexed as (x, y).
-    mask = np.zeros((nx, ny), dtype=bool)
-    mask[ix_min:ix_max, iy_min:iy_max] = True
-    print(f"Rank {comm_rank} indices of core region: ix [{ix_min}:{ix_max}], iy [{iy_min}:{iy_max}]")
-    
-    # Apply mask
-    local_element[~mask] = 0.0
-
-    for ion in cfg.chemistry.ion:
-        local_ions[ion][~mask] = 0.0
-    
-    # -------------------------------------------------
-    # MPI SUM REDUCTION (ALL RANKS HAVE FULL GRID, JUST SUMMING)
-    # -------------------------------------------------
-
-    full_element = comm.reduce(local_element.value, op=MPI.SUM, root=0)
-
-    full_ions = {}
-    for ion in cfg.chemistry.ion:
-        full_ions[ion] = comm.reduce(local_ions[ion].value, op=MPI.SUM, root=0)
+        gathered_ions[ion] = comm.gather(np.ascontiguousarray(local_ions[ion].value), root=0)
 
     if comm_rank != 0:
         return
+
+    # Assemble global map from gathered tiles
+    full_element = _assemble_global_from_tiles(
+        tile_maps=gathered_element,
+        n_tile=n_tile,
+        tile_res=tile_resolution,
+        full_res=global_resolution,
+    )
+
+    full_ions = {}
+    for ion in cfg.chemistry.ion:
+        full_ions[ion] = _assemble_global_from_tiles(
+            tile_maps=gathered_ions[ion],
+            n_tile=n_tile,
+            tile_res=tile_resolution,
+            full_res=global_resolution,
+        )
+
+    # Create global edges for the full assembled map
+    global_xedges = cosmo_array(
+        np.linspace(x_min.value, x_max.value, global_resolution + 1),
+        u.Mpc,
+        comoving=True,
+        scale_factor=snapshot.metadata.scale_factor,
+        scale_exponent=1,
+    )
+    global_yedges = cosmo_array(
+        np.linspace(y_min.value, y_max.value, global_resolution + 1),
+        u.Mpc,
+        comoving=True,
+        scale_factor=snapshot.metadata.scale_factor,
+        scale_exponent=1,
+    )
+
+    # Inject global edges into cd_2d object for save_projection_file
+    cd_2d.__dict__["xedges"] = global_xedges
+    cd_2d.__dict__["yedges"] = global_yedges
 
     # Re-wrap into cosmo_array
     n_element_column_density = cosmo_array(

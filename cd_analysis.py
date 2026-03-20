@@ -6,6 +6,7 @@ import spec_analysis.data_structure.simulation as ds
 from spec_analysis.column_density.galaxy_swift import run_halo_column_density
 from spec_analysis.column_density.box_swift import run_box_column_density  
 from spec_analysis.column_density.box_mpi import run_box_column_density_parallel
+from spec_analysis.column_density.box_mpi_multiple import run_slice_column_density_parallel
 from pathlib import Path
 import h5py
 #for now not importing the box_delta.py, this is not needed for now
@@ -70,8 +71,12 @@ def main():
     else:
         print("\nRunning full box column density analysis...") if rank == 0 else None
         if comm is not None and size > 1:
-            print(f"Running in parallel with {size} cores.") if rank == 0 else None
-            run_box_column_density_parallel(cfg, comm)
+            if cfg.window.projection_slices ==1:
+                print(f"Running full box in parallel with {size} cores.") if rank == 0 else None
+                run_box_column_density_parallel(cfg, comm)
+            elif cfg.window.projection_slices > 1:
+                print(f"Running {cfg.window.projection_slices} slice-based column density in parallel with {size} cores.") if rank == 0 else None
+                run_slice_column_density_parallel(cfg, comm)
         else:
             print(f"Running on a single core.")
             run_box_column_density(cfg)
