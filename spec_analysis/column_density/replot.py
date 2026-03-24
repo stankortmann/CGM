@@ -75,12 +75,13 @@ def run_single(cfg_plot: plot_config):
     # -------------------------
     # Element XY column density map
     # -------------------------
-
+    """ 
     plotter.plot_xy(
         column_density_values=cd_data.element_cd,
         element=cd_data.element_name,
         log_scale=True
     )
+    """ 
     output_dir = Path(data_unpacker.output_directory)
     
     
@@ -112,13 +113,13 @@ def run_single(cfg_plot: plot_config):
         # -------------------------
         # Ion XY column density map
         # -------------------------
-
+        """
         plotter.plot_xy(
             column_density_values=cd_data.ions[ion]["column_density"],
             ion=ion,
             log_scale=True
         )
-
+        """
 
         ax = plotter.plot_cddf_hist(
             cddf=cd_data.ions[ion]["cddf"],

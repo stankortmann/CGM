@@ -40,7 +40,7 @@ class plot_config:
         """
         if self.hdf5_files:
             # Use the provided filenames
-            files = [Path(self.data_directory)/Path(self.output_directory) / f for f in self.hdf5_files]
+            files = [Path(self.data_directory) / f for f in self.hdf5_files]
             for f in files:
                 if not f.exists():
                     raise FileNotFoundError(f"HDF5 file does not exist: {f}")

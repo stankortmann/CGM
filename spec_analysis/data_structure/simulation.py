@@ -41,6 +41,7 @@ class Window:
 class Chemistry:
      element: Union[str, List[str]]
      ion: Union[str, List[str]]
+     metallicity: bool
     
 @dataclass
 class Galaxy:

@@ -28,6 +28,44 @@ def _assemble_global_from_tiles(tile_maps, n_tile, tile_res, full_res):
     return full_map
 
 
+def _collect_tile_map_on_root(comm, local_tile, n_tile, tile_res, full_res, tag):
+    """Collect one rank-local tile map per rank onto root without Python object gather."""
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    local_tile = np.ascontiguousarray(local_tile)
+
+    if rank == 0:
+        full_map = np.zeros((full_res, full_res), dtype=local_tile.dtype)
+
+        # Place root tile.
+        ix = rank % n_tile
+        iy = rank // n_tile
+        ix_min = ix * tile_res
+        ix_max = (ix + 1) * tile_res
+        iy_min = iy * tile_res
+        iy_max = (iy + 1) * tile_res
+        full_map[ix_min:ix_max, iy_min:iy_max] = local_tile
+
+        # Receive and place all other tiles.
+        for src in range(1, size):
+            recv_tile = np.empty((tile_res, tile_res), dtype=local_tile.dtype)
+            comm.Recv(recv_tile, source=src, tag=tag)
+
+            ix = src % n_tile
+            iy = src // n_tile
+            ix_min = ix * tile_res
+            ix_max = (ix + 1) * tile_res
+            iy_min = iy * tile_res
+            iy_max = (iy + 1) * tile_res
+            full_map[ix_min:ix_max, iy_min:iy_max] = recv_tile
+
+        return full_map
+
+    comm.Send(local_tile, dest=0, tag=tag)
+    return None
+
+
 def run_box_column_density_parallel(cfg, comm):
     """
     Compute 2D column density using:
@@ -136,31 +174,28 @@ def run_box_column_density_parallel(cfg, comm):
     # GATHER TILES AND ASSEMBLE ON ROOT
     # -------------------------------------------------
 
-    gathered_element = comm.gather(np.ascontiguousarray(local_element.value), root=0)
-
-    gathered_ions = {}
-    for ion in cfg.chemistry.ion:
-        gathered_ions[ion] = comm.gather(np.ascontiguousarray(local_ions[ion].value), root=0)
-
-    if comm_rank != 0:
-        return
-
-    # Assemble global map from gathered tiles
-    full_element = _assemble_global_from_tiles(
-        tile_maps=gathered_element,
+    full_element = _collect_tile_map_on_root(
+        comm=comm,
+        local_tile=local_element.value,
         n_tile=n_tile,
         tile_res=tile_resolution,
         full_res=global_resolution,
+        tag=101,
     )
 
     full_ions = {}
-    for ion in cfg.chemistry.ion:
-        full_ions[ion] = _assemble_global_from_tiles(
-            tile_maps=gathered_ions[ion],
+    for ion_index, ion in enumerate(cfg.chemistry.ion):
+        full_ions[ion] = _collect_tile_map_on_root(
+            comm=comm,
+            local_tile=local_ions[ion].value,
             n_tile=n_tile,
             tile_res=tile_resolution,
             full_res=global_resolution,
+            tag=200 + ion_index,
         )
+
+    if comm_rank != 0:
+        return
 
     # Create global edges for the full assembled map
     global_xedges = cosmo_array(
@@ -197,7 +232,7 @@ def run_box_column_density_parallel(cfg, comm):
             cosmo_factor=local_ions[ion].cosmo_factor,
         )
 
-    hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data"
+    hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data" / str(cfg.chemistry.element)
     hdf5_dir.mkdir(parents=True, exist_ok=True)
 
     hdf5_path = hdf5_dir / f"{cfg.chemistry.element}_column_density.hdf5"

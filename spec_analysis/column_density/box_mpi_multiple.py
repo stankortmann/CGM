@@ -8,21 +8,7 @@ from mpi4py import MPI
 # own modules
 from spec_analysis import unpack_data
 from spec_analysis import density_profiles
-from spec_analysis import save_data
-
-
-def _assemble_global_from_tiles(tile_maps, n_tile, tile_res, full_res):
-    """Stitch rank-local (x, y) tile maps into one global map on root."""
-    full_map = np.zeros((full_res, full_res), dtype=tile_maps[0].dtype)
-    for rank_id, tile_map in enumerate(tile_maps):
-        ix = rank_id % n_tile
-        iy = rank_id // n_tile
-        ix_min = ix * tile_res
-        ix_max = (ix + 1) * tile_res
-        iy_min = iy * tile_res
-        iy_max = (iy + 1) * tile_res
-        full_map[ix_min:ix_max, iy_min:iy_max] = tile_map
-    return full_map
+from spec_analysis.save_data import projection_saver
 
 
 
@@ -93,8 +79,12 @@ def run_slice_column_density_parallel(cfg, comm):
     tile_x = [core_x[0] - overlap, core_x[1] + overlap]
     tile_y = [core_y[0] - overlap, core_y[1] + overlap]
 
-    hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data"
+    hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data" / str(cfg.chemistry.element)
     hdf5_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a single ProjectionSaver instance for all slices and final projection
+    # This ensures both per-slice and final projection use consistent settings
+    saver = projection_saver(cfg, use_compression=True, dtype=np.float32, comm=comm)
 
     full_z_min = z_min
     full_z_max = z_max
@@ -104,8 +94,7 @@ def run_slice_column_density_parallel(cfg, comm):
     total_ions = None
     cd_2d_ref = None
 
-    global_xedges = None
-    global_yedges = None
+    
 
     
     for i_slice in range(n_slices):
@@ -152,87 +141,49 @@ def run_slice_column_density_parallel(cfg, comm):
 
         print(f"Rank {comm_rank} computed local tile for slice {i_slice}: ix {ix}, iy {iy}")
 
-        gathered_element = comm.gather(np.ascontiguousarray(local_element.value), root=0)
-
-        gathered_ions = {}
-        for ion in cfg.chemistry.ion:
-            gathered_ions[ion] = comm.gather(np.ascontiguousarray(local_ions[ion].value), root=0)
+        slice_hdf5_path = hdf5_dir / f"slice_{i_slice}.hdf5"
+        n_element_column_density, stitched_ions = saver.save_projection_file_tiled_mpi(
+            file_path=slice_hdf5_path,
+            cd_2d_obj=cd_2d,
+            local_element_column_density=local_element,
+            local_ion_column_density_map=local_ions,
+            los_range_local=slice_proj_range,
+            n_tile=n_tile,
+            tile_resolution=tile_resolution,
+            global_resolution=global_resolution,
+            x_min=x_min,
+            x_max=x_max,
+            y_min=y_min,
+            y_max=y_max,
+            map_tag_base=1000 + 100 * i_slice,
+        )
 
         if comm_rank != 0:
             continue
 
-        full_element = _assemble_global_from_tiles(
-            tile_maps=gathered_element,
-            n_tile=n_tile,
-            tile_res=tile_resolution,
-            full_res=global_resolution,
-        )
-
-        full_ions = {}
-        for ion in cfg.chemistry.ion:
-            full_ions[ion] = _assemble_global_from_tiles(
-                tile_maps=gathered_ions[ion],
-                n_tile=n_tile,
-                tile_res=tile_resolution,
-                full_res=global_resolution,
-            )
-
-        if global_xedges is None:
-            global_xedges = cosmo_array(
+        if total_element is None:
+            total_element = n_element_column_density
+            total_ions = {ion: stitched_ions[ion] for ion in cfg.chemistry.ion}
+            cd_2d_ref = cd_2d
+            cd_2d_ref.__dict__["xedges"] = cosmo_array(
                 np.linspace(x_min.value, x_max.value, global_resolution + 1),
                 u.Mpc,
                 comoving=True,
                 scale_factor=snapshot.metadata.scale_factor,
                 scale_exponent=1,
             )
-            global_yedges = cosmo_array(
+            cd_2d_ref.__dict__["yedges"] = cosmo_array(
                 np.linspace(y_min.value, y_max.value, global_resolution + 1),
                 u.Mpc,
                 comoving=True,
                 scale_factor=snapshot.metadata.scale_factor,
                 scale_exponent=1,
             )
-
-            # Save full stitched maps with global edges metadata.
-            cd_2d.__dict__["xedges"] = global_xedges
-            cd_2d.__dict__["yedges"] = global_yedges
-            
-        n_element_column_density = cosmo_array(
-            full_element,
-            units=local_element.units,
-            comoving=local_element.comoving,
-            cosmo_factor=local_element.cosmo_factor,
-        )
-        for ion in cfg.chemistry.ion:
-            full_ions[ion] = cosmo_array(
-                full_ions[ion],
-                units=local_ions[ion].units,
-                comoving=local_ions[ion].comoving,
-                cosmo_factor=local_ions[ion].cosmo_factor,
-            )
-
-        if total_element is None:
-            total_element = n_element_column_density.copy()
-            total_ions = {ion: full_ions[ion].copy() for ion in cfg.chemistry.ion}
-            cd_2d_ref = cd_2d
-            cd_2d_ref.__dict__["xedges"] = global_xedges
-            cd_2d_ref.__dict__["yedges"] = global_yedges
         #summing the column density maps across slices to get the total column density map for the full projection range
         else:
             total_element += n_element_column_density
             for ion in cfg.chemistry.ion:
-                total_ions[ion] += full_ions[ion]
-
-        slice_hdf5_path = hdf5_dir / f"slice_{i_slice}.hdf5"
-        save_data.save_projection_file(
-            file_path=slice_hdf5_path,
-            cfg=cfg,
-            cd_2d_obj=cd_2d,
-            element_column_density=n_element_column_density,
-            ion_column_density_map=full_ions,
-            los_range_local=slice_proj_range,
-            use_compression=True,
-        )
+                total_ions[ion] += stitched_ions[ion]
 
         print("All data and cfg settings saved to", slice_hdf5_path)
 
@@ -240,14 +191,12 @@ def run_slice_column_density_parallel(cfg, comm):
         return
 
     total_hdf5_path = hdf5_dir / "total.hdf5"
-    save_data.save_projection_file(
+    saver.save_projection_file(
         file_path=total_hdf5_path,
-        cfg=cfg,
         cd_2d_obj=cd_2d_ref,
         element_column_density=total_element,
         ion_column_density_map=total_ions,
         los_range_local=[full_z_min, full_z_max],
-        use_compression=True,
     )
 
     print("All data and cfg settings saved to", total_hdf5_path)

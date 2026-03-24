@@ -160,7 +160,7 @@ class column_density_plotter:
             mask = cddf > 0
             log_cddf[mask] = np.log10(cddf[mask])
 
-            ax.scatter(bin_centers, log_cddf, label=label,marker="x",s=20)
+            ax.plot(bin_centers, log_cddf, label=label)
 
             ax.set_ylabel(
                 rf"$\log_{{10}}f(N_{{{name}}}) = "
