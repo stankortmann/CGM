@@ -14,6 +14,7 @@ class Simulation:
 class Data_output:
     main_dir: str
     results_dir:str
+    save_projection: bool = True
 
 @dataclass
 class Cddf:

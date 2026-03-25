@@ -50,11 +50,12 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
     if getattr(cfg_plot, "Z_label", False):
 
         if cd_data.cfg.chemistry.metallicity:
-            name = "with Z"
+            name = "" #Maybe another tag but for now empty
         else:
-            name = rf"0.1$Z_\odot$"
+            name = rf"[0.1 $Z_\odot$]"
+            line_style = "--"
         
-        label = f"{label} [{name}]"
+        label = f"{label} {name}"
     
         
 

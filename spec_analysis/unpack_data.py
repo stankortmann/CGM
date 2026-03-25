@@ -252,7 +252,7 @@ class single_cd:
             cfg_serialized = json.loads(f.attrs["cfg"])
             cfg_dict = cfg_from_serializable(cfg_serialized)
             self.cfg = dict_to_namespace(cfg_dict)
-            self.simulation_name=f"L{self.cfg.simulation.box_length:03d}/m{self.cfg.simulation.resolution}/{self.cfg.simulation.name}"
+            
             # --- read edges ---
             self.xedges = u.unyt_array(
                 f["xedges"][:],
@@ -312,6 +312,14 @@ class single_cd:
                     ion_data["column_density"] = None
 
                 self.ions[ion] = ion_data
+    @property
+    def simulation_name(self):
+        feedback = f"{self.cfg.simulation.name}" 
+        if "THERMAL_AGN" in feedback:
+            feedback = "Thermal"
+        elif "HYBRID_AGN" in feedback:
+            feedback = "Hybrid"
+        return f"L{self.cfg.simulation.box_length:03d}/m{self.cfg.simulation.resolution}/{feedback}"
     
 
 

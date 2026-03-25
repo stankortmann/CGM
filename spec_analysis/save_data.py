@@ -154,6 +154,7 @@ class projection_saver:
         """Write full projection with CD maps and CDDFs to HDF5."""
         cfg_serializable = cfg_to_serializable(self.cfg)
         los_distance_local = (los_range_local[1] - los_range_local[0]).to("Mpc").to_physical()
+        save_projection_map = self.cfg.data_output.save_projection
 
         with h5py.File(file_path, "w") as f:
             f.attrs["cfg"] = json.dumps(cfg_serializable)
@@ -183,8 +184,9 @@ class projection_saver:
             element_cddf, element_bin_centers, element_bin_width = element_cddf_tuple
 
             grp_elem = f.create_group(f"{self.cfg.chemistry.element}")
-            ds_elem = self._write_array(grp_elem, "column_density", element_column_density.value)
-            ds_elem.attrs["unit"] = str(element_column_density.units)
+            if save_projection_map:
+                ds_elem = self._write_array(grp_elem, "column_density", element_column_density.value)
+                ds_elem.attrs["unit"] = str(element_column_density.units)
             self._write_array(grp_elem, "cddf", element_cddf)
             self._write_array(grp_elem, "bin_centers", element_bin_centers)
             grp_elem.create_dataset("bin_width", data=element_bin_width)
@@ -194,8 +196,9 @@ class projection_saver:
                 ion_cddf, ion_bin_centers, ion_bin_width = ion_cddf_map[ion]
 
                 grp_ion = f.create_group(f"{ion}")
-                ds_ion = self._write_array(grp_ion, "column_density", n_ion_column_density.value)
-                ds_ion.attrs["unit"] = str(n_ion_column_density.units)
+                if save_projection_map:
+                    ds_ion = self._write_array(grp_ion, "column_density", n_ion_column_density.value)
+                    ds_ion.attrs["unit"] = str(n_ion_column_density.units)
                 self._write_array(grp_ion, "cddf", ion_cddf)
                 self._write_array(grp_ion, "bin_centers", ion_bin_centers)
                 grp_ion.create_dataset("bin_width", data=ion_bin_width)

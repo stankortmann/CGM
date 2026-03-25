@@ -63,6 +63,15 @@ class elements:
         element_mass= gas_particles.masses.to_physical() * element_frac #always physical!!!
         element_number = element_mass * elements.particles_per_mass(element)
         return element_number
+    
+    @staticmethod
+    def scale_element_density_by_metallicity(element_densities, actual_metallicity, fixed_metallicity):
+        """
+        Scale element densities from actual to fixed metallicity.
+        actual_metallicity and fixed_metallicity should be in units of Z_solar.
+        """
+        scaling_factor = fixed_metallicity / actual_metallicity
+        return element_densities * scaling_factor
 
 
 class simulation_constants:

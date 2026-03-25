@@ -298,7 +298,10 @@ class column_density_2d_swift:
     def metallicities(self):
         solar_metallicity = 0.0129
         Z = self.gas_particles.metal_mass_fractions.to_physical().value
-        return Z / solar_metallicity
+        if self.cfg.chemistry.metallicity:
+            return Z / solar_metallicity
+        else:
+            return np.full_like(Z, 0.1)  # Use solar metallicity if not taking it into account
 
     @cached_property
     def log_Z(self):
