@@ -354,9 +354,9 @@ def save_projection_file(
     los_range_local,
     use_compression=False,
     dtype=np.float64,
-):
+    ):
     """Module-level wrapper for single projection save."""
-    saver = ProjectionSaver(cfg, use_compression=use_compression, dtype=dtype)
+    saver = projection_saver(cfg, use_compression=use_compression, dtype=dtype)
     saver.save_projection_file(
         file_path=file_path,
         cd_2d_obj=cd_2d_obj,
@@ -386,7 +386,7 @@ def save_projection_file_tiled_mpi(
     dtype=np.float64,
 ):
     """Module-level wrapper for MPI tiled save."""
-    saver = ProjectionSaver(cfg, use_compression=use_compression, dtype=dtype, comm=comm)
+    saver = projection_saver(cfg, use_compression=use_compression, dtype=dtype, comm=comm)
     return saver.save_projection_file_tiled_mpi(
         file_path=file_path,
         cd_2d_obj=cd_2d_obj,

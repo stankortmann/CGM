@@ -240,9 +240,11 @@ class unwrapper:
 
 class single_cd:
 
-    def __init__(self, hdf5_path):
+    def __init__(self, hdf5_path,load_cd=False):
 
         self.hdf5_path = hdf5_path
+        self.load_cd = load_cd
+        
 
         with h5py.File(hdf5_path, "r") as f:
 
@@ -250,7 +252,7 @@ class single_cd:
             cfg_serialized = json.loads(f.attrs["cfg"])
             cfg_dict = cfg_from_serializable(cfg_serialized)
             self.cfg = dict_to_namespace(cfg_dict)
-
+            self.simulation_name=f"L{self.cfg.simulation.box_length:03d}/m{self.cfg.simulation.resolution}/{self.cfg.simulation.name}"
             # --- read edges ---
             self.xedges = u.unyt_array(
                 f["xedges"][:],
@@ -268,12 +270,16 @@ class single_cd:
 
             grp_elem = f[element]
 
-            ds_elem = grp_elem["column_density"]
+            # Conditionally load column density
+            if load_cd:
+                ds_elem = grp_elem["column_density"]
 
-            self.element_cd = u.unyt_array(
-                ds_elem[:],
-                units=ds_elem.attrs.get("unit", "cm**-2")
-            )
+                self.element_cd = u.unyt_array(
+                    ds_elem[:],
+                    units=ds_elem.attrs.get("unit", "cm**-2")
+                )
+            else:
+                self.element_cd = None
 
             self.element_cddf = grp_elem["cddf"][:]
             self.element_bin_centers = grp_elem["bin_centers"][:]
@@ -289,21 +295,23 @@ class single_cd:
 
                 grp = f[ion]
 
-                ds = grp["column_density"]
-
-                self.ions[ion] = {
-
-                    "column_density": u.unyt_array(
-                        ds[:],
-                        units=ds.attrs.get("unit", "cm**-2")
-                    ),
-
+                ion_data = {
                     "cddf": grp["cddf"][:],
-
                     "bin_centers": grp["bin_centers"][:],
-
                     "bin_width": grp["bin_width"]
                 }
+
+                # Conditionally load column density
+                if load_cd:
+                    ds = grp["column_density"]
+                    ion_data["column_density"] = u.unyt_array(
+                        ds[:],
+                        units=ds.attrs.get("unit", "cm**-2")
+                    )
+                else:
+                    ion_data["column_density"] = None
+
+                self.ions[ion] = ion_data
     
 
 

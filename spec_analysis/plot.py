@@ -141,7 +141,9 @@ class column_density_plotter:
         element=None,
         log_scale=True,
         ax=None,
-        label=None
+        label=None,
+        linestyle="-",
+        color=None
     ):
 
         name = self._resolve_name(ion, element)
@@ -160,7 +162,13 @@ class column_density_plotter:
             mask = cddf > 0
             log_cddf[mask] = np.log10(cddf[mask])
 
-            ax.plot(bin_centers, log_cddf, label=label)
+            ax.plot(
+                bin_centers,
+                log_cddf,
+                label=label,
+                linestyle=linestyle,
+                color=color,
+            )
 
             ax.set_ylabel(
                 rf"$\log_{{10}}f(N_{{{name}}}) = "
@@ -169,13 +177,13 @@ class column_density_plotter:
 
         else:
 
-            ax.bar(bin_centers, cddf, width=bin_width, label=label)
+            ax.bar(bin_centers, cddf, width=bin_width, label=label, color=color)
 
             ax.set_ylabel(
                 rf"$f(N_{{{name}}}) = \frac{{d^2 n}}{{dN_{{{name}}}\,d\chi}}$"
             )
 
-        ax.set_xlabel(rf"$\log_{{10}}(N_{{{name}}})$")
+        ax.set_xlabel(rf"$\log_{{10}}(N_{{{name}}}) [cm^{{-2}}]$")
 
         if label is not None:
             ax.legend()

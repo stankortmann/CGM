@@ -25,6 +25,9 @@ def load_cfg_plot(cfg_path: str) -> plot_config:
         cd_log_range=cfg_dict["cd_log_range"],
         output_directory=cfg_dict["output_directory"],
         hdf5_files=cfg_dict.get("hdf5_files", None),
+        load_cd=cfg_dict.get("load_cd", False),
+        stack_total_label=cfg_dict.get("stack_total_label", False),
+        Z_label=cfg_dict.get("Z_label", False),
         plot_eagle=cfg_dict.get("plot_eagle", False),
         eagle_cddf_directory=Path(cfg_dict.get("eagle_cddf_directory", None)) if cfg_dict.get("eagle_cddf_directory", None) else None
     )

@@ -14,17 +14,51 @@ def get_label(cd_data,data_unpacker,selection_criterium):
         return f"Box size: {cd_data.cfg.simulation.box_size:.1f} Mpc"
     elif selection_criterium == "redshift":
         return f"z= {data_unpacker.redshift:.2f}"
+    elif selection_criterium == "file_name":
+        return f"Filename: {Path(cd_data.hdf5_path).stem}"
     elif selection_criterium == "scale_factor":
         return f"a= {data_unpacker.scale_factor:.3f}"
     elif selection_criterium == "particle_resolution":
-        return f"m: {cd_data.cfg.simulation.resolution}"
+        return f"m{cd_data.cfg.simulation.resolution}"
     elif selection_criterium == "pixel_resolution":
-        return rf"Pixel number: ${cd_data.cfg.window.resolution}^2$"
+        pixel_size_ckpc = cd_data.cfg.simulation.box_length * 1000 / cd_data.cfg.window.resolution
+        return rf"Pixel size: {pixel_size_ckpc:.1f}$^2 cKpc^2$"
     elif selection_criterium == "simulation_name":
-        return f"L{cd_data.cfg.simulation.box_length:03d}_m{cd_data.cfg.simulation.resolution}_{cd_data.cfg.simulation.name}"
+        return cd_data.simulation_name
     #can add more criteria here as needed
     else:
         raise ValueError(f"Unknown label criterion: {selection_criterium}")
+
+
+def get_label_and_style(cd_data, data_unpacker, cfg_plot):
+    """Return label and linestyle based on selection criterion and filename stem rules."""
+    label = get_label(cd_data, data_unpacker, cfg_plot.label_criterion)
+    line_style = "-"
+    
+
+    if getattr(cfg_plot, "stack_total_label", False):
+        stem = Path(cd_data.hdf5_path).stem
+        if not label.endswith(stem):
+            if stem == "total":
+                name = "full box projection"
+            if stem == "stacked": 
+                name = f"{cd_data.cfg.simulation.box_length/cd_data.cfg.window.projection_slices:.2f} cMpc slice average"
+            label = f"{label} [{name}]"
+        if stem == "stacked":
+            line_style = "--"
+            
+    if getattr(cfg_plot, "Z_label", False):
+
+        if cd_data.cfg.chemistry.metallicity:
+            name = "with Z"
+        else:
+            name = rf"0.1$Z_\odot$"
+        
+        label = f"{label} [{name}]"
+    
+        
+
+    return label, line_style
 
 
 def plot_eagle_cddf(ax, ion, cfg_plot):
@@ -46,8 +80,8 @@ def plot_eagle_cddf(ax, ion, cfg_plot):
     ax.scatter(
         data[:, 0],
         data[:, 1],
-        label="EAGLE",
-        marker="o",
+        label="EAGLE (L100/m6 [6.25 cMpc slice average])",
+        marker="x",
         s=20,
         color="black",
         zorder=5
@@ -62,7 +96,7 @@ def run_single(cfg_plot: plot_config):
 
     data_file = Path(cfg_plot.data_files[0])
 
-    cd_data = single_cd(data_file)
+    cd_data = single_cd(data_file, load_cd=cfg_plot.load_cd)
     data_unpacker = unwrapper(cd_data.cfg)
 
     plotter = plot.column_density_plotter(
@@ -72,6 +106,9 @@ def run_single(cfg_plot: plot_config):
         y_edges=cd_data.yedges,
         cfg_plot=cfg_plot
     )
+    # Get label for this plot based on the selection criterion
+    label, line_style = get_label_and_style(cd_data, data_unpacker, cfg_plot)
+    
     # -------------------------
     # Element XY column density map
     # -------------------------
@@ -83,19 +120,30 @@ def run_single(cfg_plot: plot_config):
     )
     """ 
     output_dir = Path(data_unpacker.output_directory)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     
     # -------------------------
     # Element CDDF
     # -------------------------
 
-    plotter.plot_cddf_hist(
-        cddf=cd_data.element_cddf,
+    ax = plotter.plot_cddf_hist(
+        cddf=cd_data.element_cddf*16,
         bin_centers=cd_data.element_bin_centers,
         bin_width=cd_data.element_bin_width,
         element=cd_data.element_name,
+        label=label,
+        linestyle=line_style,
         log_scale=True
     )
+    plt.legend()
+    ax.set_title(f"CDDF of {cd_data.element_name}")
+    plt.tight_layout()
+    file_path = output_dir / f"CDDF/{cd_data.element_name}.png"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+    plt.close(ax.figure)
+    print("Saved", file_path)
 
 
     # -------------------------
@@ -122,16 +170,19 @@ def run_single(cfg_plot: plot_config):
         """
 
         ax = plotter.plot_cddf_hist(
-            cddf=cd_data.ions[ion]["cddf"],
+            cddf=cd_data.ions[ion]["cddf"]*16,
             bin_centers=cd_data.ions[ion]["bin_centers"],
             bin_width=cd_data.ions[ion]["bin_width"],
             ion=ion,
+            label=label,
+            linestyle=line_style,
             log_scale=True
         )
         # --- CDDF single plotting inside the original data directory ---
         ax = plot_eagle_cddf(ax, ion, cfg_plot)
 
-        
+        plt.legend()
+        ax.set_title(f"CDDF of {ion}")
 
         plt.tight_layout()
 
@@ -164,12 +215,21 @@ def run_multiple(cfg_plot):
     """
     element_ax_dict = {}
     ion_ax_dict = {}
+    simulation_color_map = {}
+    color_cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0"])
+
+    def get_simulation_color(simulation_name):
+        if simulation_name not in simulation_color_map:
+            simulation_color_map[simulation_name] = color_cycle[
+                len(simulation_color_map) % len(color_cycle)
+            ]
+        return simulation_color_map[simulation_name]
 
     for data_file in cfg_plot.data_files:
         data_file = Path(data_file)
 
         # --- Load HDF5 data ---
-        cd_data = single_cd(data_file)
+        cd_data = single_cd(data_file, load_cd=cfg_plot.load_cd)
         data_unpacker = unwrapper(cd_data.cfg)
 
         # --- Initialize plotter ---
@@ -181,7 +241,8 @@ def run_multiple(cfg_plot):
             cfg_plot=cfg_plot
         )
         # this is the label for this particular data_file, based on the selection criterion
-        label = get_label(cd_data, data_unpacker, cfg_plot.label_criterion)
+        label, line_style = get_label_and_style(cd_data, data_unpacker, cfg_plot)
+        line_color = get_simulation_color(cd_data.simulation_name)
         # --- Element CDDF ---
         ax_elem = element_ax_dict.get(cd_data.element_name)
         ax_elem = plotter.plot_cddf_hist(
@@ -190,6 +251,8 @@ def run_multiple(cfg_plot):
             bin_width=cd_data.element_bin_width,
             element=cd_data.element_name,
             label=label,
+            linestyle=line_style,
+            color=line_color,
             log_scale=True,
             ax=ax_elem
         )
@@ -209,6 +272,8 @@ def run_multiple(cfg_plot):
                 bin_width=cd_data.ions[ion]["bin_width"],
                 ion=ion,
                 label=label,
+                linestyle=line_style,
+                color=line_color,
                 log_scale=True,
                 ax=ax_ion
             )
