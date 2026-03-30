@@ -2,13 +2,15 @@ from swiftsimio import load
 import numpy as np
 import unyt as u
 from pathlib import Path
-from swiftsimio.objects import cosmo_array
+from swiftsimio.objects import cosmo_array, cosmo_quantity
 from mpi4py import MPI
+import os
 
 # own modules
 from spec_analysis import unpack_data
 from spec_analysis import density_profiles
 from spec_analysis.save_data import projection_saver
+from spec_analysis import chemistry as chem
 
 
 
@@ -29,6 +31,26 @@ def run_slice_column_density_parallel(cfg, comm):
     n_slices = int(cfg.window.projection_slices)
     if n_slices < 1:
         raise ValueError("cfg.window.projection_slices must be >= 1")
+
+    # Optional environment-driven slice chunking for job-array distribution.
+    # Defaults keep the original behavior (all slices in one job).
+    slice_start = int(os.environ.get("CD_SLICE_START", "0"))
+    slice_count = int(os.environ.get("CD_SLICE_COUNT", str(n_slices)))
+    if slice_start < 0:
+        raise ValueError("CD_SLICE_START must be >= 0")
+    if slice_count < 1:
+        raise ValueError("CD_SLICE_COUNT must be >= 1")
+
+    slice_end = min(n_slices, slice_start + slice_count)
+    if slice_start >= n_slices:
+        if comm_rank == 0:
+            print(
+                f"No slices to process for this job: CD_SLICE_START={slice_start}, "
+                f"projection_slices={n_slices}."
+            )
+        return
+
+    active_slices = list(range(slice_start, slice_end))
 
     # -------------------------------------------------
     # Unpack simulation
@@ -71,7 +93,13 @@ def run_slice_column_density_parallel(cfg, comm):
     dy = (y_max - y_min) / n_tile
 
     # Overlap ONLY for particle loading, take 1 cMpc as default
-    overlap = getattr(cfg.window, "tile_overlap", 0.01) * comoving_box_size
+    overlap = cosmo_quantity(
+                1,
+                u.Mpc,
+                comoving=True,
+                scale_factor=data_unpacker.scale_factor,
+                scale_exponent=1,
+            )
 
     core_x = [x_min + ix * dx, x_min + (ix + 1) * dx]
     core_y = [y_min + iy * dy, y_min + (iy + 1) * dy]
@@ -93,11 +121,20 @@ def run_slice_column_density_parallel(cfg, comm):
     total_element = None
     total_ions = None
     cd_2d_ref = None
+    save_projection_map = bool(cfg.data_output.save_projection)
+    verbose_ranks = os.environ.get("CD_VERBOSE_RANKS", "0") == "1"
 
     
+    #initialize chimes table once to avoid repeated loading in each slice
+    chimes = chem.chimes(data_unpacker.chimes_table_path,ions_to_cache=cfg.chemistry.ion)
+     
+    if comm_rank == 0:
+        print(
+            f"Slice chunk for this job: start={slice_start}, end={slice_end - 1}, "
+            f"count={len(active_slices)} of total {n_slices}."
+        )
 
-    
-    for i_slice in range(n_slices):
+    for i_slice in active_slices:
         slice_z_min = z_min + i_slice * dz
         slice_z_max = z_min + (i_slice + 1) * dz
         slice_proj_range = [slice_z_min, slice_z_max]
@@ -123,6 +160,7 @@ def run_slice_column_density_parallel(cfg, comm):
             cd_2d = density_profiles.column_density_2d_swift(
                 cfg=cfg,
                 data_unpacker=data_unpacker,
+                chimes=chimes,
                 snapshot=snapshot,
                 element=cfg.chemistry.element,
                 mpi=True
@@ -139,7 +177,8 @@ def run_slice_column_density_parallel(cfg, comm):
             cfg.window.y = original_y
             cfg.window.resolution = original_resolution
 
-        print(f"Rank {comm_rank} computed local tile for slice {i_slice}: ix {ix}, iy {iy}")
+        if verbose_ranks:
+            print(f"Rank {comm_rank} computed local tile for slice {i_slice}: ix {ix}, iy {iy}")
 
         slice_hdf5_path = hdf5_dir / f"slice_{i_slice}.hdf5"
         n_element_column_density, stitched_ions = saver.save_projection_file_tiled_mpi(
@@ -156,7 +195,13 @@ def run_slice_column_density_parallel(cfg, comm):
             y_min=y_min,
             y_max=y_max,
             map_tag_base=1000 + 100 * i_slice,
+            skip_map_stitch=not save_projection_map,
         )
+
+        if not save_projection_map:
+            if comm_rank == 0:
+                print("All data and cfg settings saved to", slice_hdf5_path)
+            continue
 
         if comm_rank != 0:
             continue
@@ -187,16 +232,27 @@ def run_slice_column_density_parallel(cfg, comm):
 
         print("All data and cfg settings saved to", slice_hdf5_path)
 
-    if comm_rank != 0:
+    if not save_projection_map:
+        if comm_rank == 0:
+            print("save_projection is off: skipped full-projection stitching and total CDDF output.")
         return
 
-    total_hdf5_path = hdf5_dir / "total.hdf5"
-    saver.save_projection_file(
-        file_path=total_hdf5_path,
-        cd_2d_obj=cd_2d_ref,
-        element_column_density=total_element,
-        ion_column_density_map=total_ions,
-        los_range_local=[full_z_min, full_z_max],
-    )
+    if slice_start == 0 and slice_end == n_slices:
+        total_hdf5_path = hdf5_dir / "total.hdf5"
+    else:
+        total_hdf5_path = hdf5_dir / f"total_slice_{slice_start}_{slice_end - 1}.hdf5"
 
-    print("All data and cfg settings saved to", total_hdf5_path)
+    if save_projection_map:
+        if comm_rank != 0:
+            return
+
+        saver.save_projection_file(
+            file_path=total_hdf5_path,
+            cd_2d_obj=cd_2d_ref,
+            element_column_density=total_element,
+            ion_column_density_map=total_ions,
+            los_range_local=[full_z_min, full_z_max],
+        )
+
+        print("All data and cfg settings saved to", total_hdf5_path)
+        return

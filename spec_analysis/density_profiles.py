@@ -231,7 +231,7 @@ class column_density_2d_swift:
     Designed for SWIFT + CHIMES workflows.
     """
 
-    def __init__(self, cfg, data_unpacker, 
+    def __init__(self, cfg, data_unpacker,chimes, 
             element, snapshot=None,gas_particles=None, halo=None,mpi=False):
         
         
@@ -268,7 +268,7 @@ class column_density_2d_swift:
         self.element = element
         
 
-        self.chimes = chem.chimes(data_unpacker.chimes_table_path)
+        self.chimes = chimes
 
         
 
@@ -297,11 +297,12 @@ class column_density_2d_swift:
     @cached_property
     def metallicities(self):
         solar_metallicity = 0.0129
-        Z = self.gas_particles.metal_mass_fractions.to_physical().value
+        
         if self.cfg.chemistry.metallicity:
+            Z = self.gas_particles.metal_mass_fractions.to_physical().value
             return Z / solar_metallicity
         else:
-            return np.full_like(Z, 0.1)  # Use solar metallicity if not taking it into account
+            return 0.1  # Use solar metallicity if not taking it into account
 
     @cached_property
     def log_Z(self):
@@ -359,7 +360,7 @@ class column_density_2d_swift:
 
     @cached_property
     def n_element(self):
-        n_element=chem.elements.get_particle_number(self.element,self.gas_particles).value
+        n_element=chem.elements.get_particle_number(self.element,self.gas_particles,metallicity=self.cfg.chemistry.metallicity).value
         
         n_element_cosmo_array= cosmo_array(
                                         n_element,

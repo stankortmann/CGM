@@ -18,6 +18,7 @@ class plot_config:
     load_cd: bool = False                  # Whether to load full column density maps (False skips XY map plots, saves memory)
     stack_total_label: bool = False        # If true, append filename stem to labels and use dashed line for stacked/total files
     Z_label: bool = False                # Whether to label with_Z and no_Z simulations in the legend
+    slice_label: bool = False            # Whether to label the different slices in the legend
     plot_eagle: bool = False               # Whether to plot EAGLE CDDF for comparison
     eagle_cddf_directory: Optional[str] = None  # Path to the directory containing EAGLE CDDF files
 

@@ -58,20 +58,20 @@ class elements:
 
 
     @staticmethod
-    def get_particle_number(element,gas_particles):
-        element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!
+    def get_particle_number(element,gas_particles,metallicity=True):
+        if metallicity:
+            element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!
+        else:
+            if element == "oxygen":
+                element_frac_sun = 0.0057 #taken from solar abundance table, Asplund et al. 2009
+                element_frac = element_frac_sun*0.1
+            else:
+                element_frac = getattr(gas_particles.element_mass_fractions, element).to_physical() #always physical!!!
         element_mass= gas_particles.masses.to_physical() * element_frac #always physical!!!
         element_number = element_mass * elements.particles_per_mass(element)
         return element_number
     
-    @staticmethod
-    def scale_element_density_by_metallicity(element_densities, actual_metallicity, fixed_metallicity):
-        """
-        Scale element densities from actual to fixed metallicity.
-        actual_metallicity and fixed_metallicity should be in units of Z_solar.
-        """
-        scaling_factor = fixed_metallicity / actual_metallicity
-        return element_densities * scaling_factor
+
 
 
 class simulation_constants:
@@ -91,28 +91,8 @@ class simulation_constants:
 
 
 #Uses the CHIMES equilibrium table to extract the abundance of a given ion for a given log_Z, log_T, and log_nH_cm3
-class chimes:
-    def __init__(self, chimes_table_path):
-        self.chimes_table_path = chimes_table_path
-        self.load_chimes_table()
-
-
-    def load_chimes_table(self):
-        with h5py.File(self.chimes_table_path, "r") as f:
-    
-            # 4D abundance grid
-            #abundances=(N_Temperatures x N_Densities x N_Metallicities x N_species)
-            self.abundances = f["Abundances"][:]  
-            
-            
-            self.log_T_table  = f["TableBins/Temperatures"][:]
-            self.log_n_H_cm3_table = f["TableBins/Densities"][:]
-            self.log_Z_table  = f["TableBins/Metallicities"][:]
-
-        
-    def extract_ion_abundance(self,ion,log_Z,log_T,log_n_H_cm3):
-        # Load the Chimes table using chimestools
-        chimes_dict = {"elec": 0,
+# Load the Chimes table using chimestools
+CHIMES_DICT = {"elec": 0,
                     "HI": 1,
                     "HII": 2,
                     "Hm": 3,
@@ -269,37 +249,57 @@ class chimes:
                     "COp": 154,
                     "HOCp": 155,
                     "O2p": 156}
-                    
-        ion_index = chimes_dict[ion]
-        
-        ion_abundance_table = self.abundances[:,:, :, ion_index]
 
-        # Interpolate the abundance for the given log_Z, log_T, and log_n_element_cm3
-        interp = RegularGridInterpolator( (self.log_T_table, self.log_n_H_cm3_table, self.log_Z_table), 
-                                            ion_abundance_table, 
-                                            bounds_error=False, 
-                                            fill_value=None)
-        #set metallicity ==Nan to lowest metallicity in the table to avoid issues with interpolation when logZ=-inf
-        
-        
-        
-        #clip all the input values to be within the bounds of the table to avoid interpolation errors
-        log_T = np.clip(log_T,
-                        np.min(self.log_T_table),
-                        np.max(self.log_T_table))
+class chimes:
+    def __init__(self, chimes_table_path, ions_to_cache=None):
+        self.chimes_table_path = chimes_table_path
+        self._interpolators = {}  # cache: ion -> RegularGridInterpolator
+        self.load_chimes_table()
 
-        log_n_H_cm3 = np.clip(log_n_H_cm3,
-                            np.min(self.log_n_H_cm3_table),
-                            np.max(self.log_n_H_cm3_table))
+        # optional eager cache
+        if ions_to_cache:
+            self.preload_interpolators(ions_to_cache)
 
-        log_Z = np.clip(log_Z,
-                        np.min(self.log_Z_table),
-                        np.max(self.log_Z_table))
-        
-        #actual interpolation
-        ion_abundance = interp((log_T, log_n_H_cm3, log_Z))
-        
-        #this is in log10(n_ion/n_element)
-        return ion_abundance
+    def load_chimes_table(self):
+        with h5py.File(self.chimes_table_path, "r") as f:
+            self.abundances = f["Abundances"][:]  # keep as-is for now
+            self.log_T_table = f["TableBins/Temperatures"][:]
+            self.log_n_H_cm3_table = f["TableBins/Densities"][:]
+            self.log_Z_table = f["TableBins/Metallicities"][:]
+
+        self._log_T_min, self._log_T_max = np.min(self.log_T_table), np.max(self.log_T_table)
+        self._log_nH_min, self._log_nH_max = np.min(self.log_n_H_cm3_table), np.max(self.log_n_H_cm3_table)
+        self._log_Z_min, self._log_Z_max = np.min(self.log_Z_table), np.max(self.log_Z_table)
+
+    def _get_interpolator(self, ion, ion_index=None):
+        if ion_index is None:
+            ion_index = CHIMES_DICT[ion]
+        if ion not in self._interpolators:
+            ion_abundance_table = self.abundances[:, :, :, ion_index]
+            self._interpolators[ion] = RegularGridInterpolator(
+                (self.log_T_table, self.log_n_H_cm3_table, self.log_Z_table),
+                ion_abundance_table,
+                bounds_error=False,
+                fill_value=None,
+            )
+        return self._interpolators[ion]
+
+    def preload_interpolators(self, ions):
+        for ion in ions:
+            self._get_interpolator(ion, CHIMES_DICT[ion])
+
+    def extract_ion_abundance(self, ion, log_Z, log_T, log_n_H_cm3):
+        interp = self._get_interpolator(ion)
+
+        log_T, log_n_H_cm3, log_Z = np.broadcast_arrays(
+            np.asarray(log_T),
+            np.asarray(log_n_H_cm3),
+            np.asarray(log_Z),
+        )
+        log_T = np.clip(log_T, self._log_T_min, self._log_T_max)
+        log_n_H_cm3 = np.clip(log_n_H_cm3, self._log_nH_min, self._log_nH_max)
+        log_Z = np.clip(log_Z, self._log_Z_min, self._log_Z_max)
+
+        return interp((log_T, log_n_H_cm3, log_Z))
         
         

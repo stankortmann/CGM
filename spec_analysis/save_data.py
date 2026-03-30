@@ -156,6 +156,9 @@ class projection_saver:
         los_distance_local = (los_range_local[1] - los_range_local[0]).to("Mpc").to_physical()
         save_projection_map = self.cfg.data_output.save_projection
 
+        if save_projection_map and (element_column_density is None or ion_column_density_map is None):
+            raise ValueError("Projection maps requested but no column-density maps were provided.")
+
         with h5py.File(file_path, "w") as f:
             f.attrs["cfg"] = json.dumps(cfg_serializable)
 
@@ -192,11 +195,11 @@ class projection_saver:
             grp_elem.create_dataset("bin_width", data=element_bin_width)
 
             for ion in self.cfg.chemistry.ion:
-                n_ion_column_density = ion_column_density_map[ion]
                 ion_cddf, ion_bin_centers, ion_bin_width = ion_cddf_map[ion]
 
                 grp_ion = f.create_group(f"{ion}")
                 if save_projection_map:
+                    n_ion_column_density = ion_column_density_map[ion]
                     ds_ion = self._write_array(grp_ion, "column_density", n_ion_column_density.value)
                     ds_ion.attrs["unit"] = str(n_ion_column_density.units)
                 self._write_array(grp_ion, "cddf", ion_cddf)
@@ -258,27 +261,10 @@ class projection_saver:
         y_min,
         y_max,
         map_tag_base=100,
+        skip_map_stitch=False,
     ):
         """Join tiled maps via MPI, reduce CDDFs, and save on root."""
         rank = self.comm.Get_rank()
-
-        full_element = self._collect_tile_map_on_root(
-            local_tile=local_element_column_density.to_physical().value,
-            n_tile=n_tile,
-            tile_res=tile_resolution,
-            full_res=global_resolution,
-            tag=map_tag_base,
-        )
-
-        full_ions = {}
-        for ion_index, ion in enumerate(self.cfg.chemistry.ion):
-            full_ions[ion] = self._collect_tile_map_on_root(
-                local_tile=local_ion_column_density_map[ion].to_physical().value,
-                n_tile=n_tile,
-                tile_res=tile_resolution,
-                full_res=global_resolution,
-                tag=map_tag_base + 100 + ion_index,
-            )
 
         element_cddf_tuple = self._reduced_cddf_from_local_tile(
             cd_2d_obj=cd_2d_obj,
@@ -296,6 +282,56 @@ class projection_saver:
                 log_column_density_range=self.cfg.cddf.log_range,
                 n_bins=self.cfg.cddf.bins,
                 los_range_local=los_range_local,
+            )
+
+        if skip_map_stitch:
+            if rank != 0:
+                return None, None
+
+            scale_factor = cd_2d_obj.snapshot.metadata.scale_factor
+            global_xedges = cosmo_array(
+                np.linspace(x_min.value, x_max.value, global_resolution + 1),
+                x_min.units,
+                comoving=True,
+                scale_factor=scale_factor,
+                scale_exponent=1,
+            )
+            global_yedges = cosmo_array(
+                np.linspace(y_min.value, y_max.value, global_resolution + 1),
+                y_min.units,
+                comoving=True,
+                scale_factor=scale_factor,
+                scale_exponent=1,
+            )
+
+            self._write_projection_hdf5(
+                file_path=file_path,
+                xedges_physical=global_xedges.to_physical(),
+                yedges_physical=global_yedges.to_physical(),
+                element_column_density=None,
+                ion_column_density_map=None,
+                los_range_local=los_range_local,
+                element_cddf_tuple=element_cddf_tuple,
+                ion_cddf_map=ion_cddf_map,
+            )
+            return None, None
+
+        full_element = self._collect_tile_map_on_root(
+            local_tile=local_element_column_density.to_physical().value,
+            n_tile=n_tile,
+            tile_res=tile_resolution,
+            full_res=global_resolution,
+            tag=map_tag_base,
+        )
+
+        full_ions = {}
+        for ion_index, ion in enumerate(self.cfg.chemistry.ion):
+            full_ions[ion] = self._collect_tile_map_on_root(
+                local_tile=local_ion_column_density_map[ion].to_physical().value,
+                n_tile=n_tile,
+                tile_res=tile_resolution,
+                full_res=global_resolution,
+                tag=map_tag_base + 100 + ion_index,
             )
 
         if rank != 0:
@@ -387,6 +423,7 @@ def save_projection_file_tiled_mpi(
     map_tag_base=100,
     use_compression=False,
     dtype=np.float64,
+    skip_map_stitch=False,
 ):
     """Module-level wrapper for MPI tiled save."""
     saver = projection_saver(cfg, use_compression=use_compression, dtype=dtype, comm=comm)
@@ -404,4 +441,5 @@ def save_projection_file_tiled_mpi(
         y_min=y_min,
         y_max=y_max,
         map_tag_base=map_tag_base,
+        skip_map_stitch=skip_map_stitch,
     )

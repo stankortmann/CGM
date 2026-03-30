@@ -36,7 +36,7 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
     line_style = "-"
     
 
-    if getattr(cfg_plot, "stack_total_label", False):
+    if getattr(cfg_plot, "stack_total_label", False) and not getattr(cfg_plot, "slice_label", False):
         stem = Path(cd_data.hdf5_path).stem
         if not label.endswith(stem):
             if stem == "total":
@@ -49,15 +49,18 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
             
     if getattr(cfg_plot, "Z_label", False):
 
-        if cd_data.cfg.chemistry.metallicity:
+        if getattr(cd_data.cfg.chemistry, "metallicity", True):
             name = "" #Maybe another tag but for now empty
         else:
             name = rf"[0.1 $Z_\odot$]"
             line_style = "--"
         
         label = f"{label} {name}"
-    
         
+    if getattr(cfg_plot, "slice_label", False):
+        if hasattr(cd_data.cfg.window, "projection_slices"):
+            name = f"{cd_data.cfg.simulation.box_length/cd_data.cfg.window.projection_slices:.2f} cMpc slice average"
+            label = f"{label} [{name}]"
 
     return label, line_style
 
@@ -219,12 +222,15 @@ def run_multiple(cfg_plot):
     simulation_color_map = {}
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0"])
 
-    def get_simulation_color(simulation_name):
-        if simulation_name not in simulation_color_map:
-            simulation_color_map[simulation_name] = color_cycle[
+
+    def get_simulation_color(color_key):
+        if color_key not in simulation_color_map:
+            simulation_color_map[color_key] = color_cycle[
                 len(simulation_color_map) % len(color_cycle)
             ]
-        return simulation_color_map[simulation_name]
+        return simulation_color_map[color_key]
+
+
 
     for data_file in cfg_plot.data_files:
         data_file = Path(data_file)
@@ -243,7 +249,13 @@ def run_multiple(cfg_plot):
         )
         # this is the label for this particular data_file, based on the selection criterion
         label, line_style = get_label_and_style(cd_data, data_unpacker, cfg_plot)
-        line_color = get_simulation_color(cd_data.simulation_name)
+
+        if getattr(cfg_plot, "slice_label", False) and hasattr(cd_data.cfg.window, "projection_slices"):
+            color_key = (cd_data.simulation_name, cd_data.cfg.window.projection_slices)
+        else:
+            color_key = cd_data.simulation_name
+
+        line_color = get_simulation_color(color_key)
         # --- Element CDDF ---
         ax_elem = element_ax_dict.get(cd_data.element_name)
         ax_elem = plotter.plot_cddf_hist(

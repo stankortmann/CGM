@@ -12,6 +12,7 @@ from spec_analysis import unpack_data
 from spec_analysis import density_profiles
 from spec_analysis import plot
 from spec_analysis import save_data
+from spec_analysis import chemistry as chem
 
 
 def _assemble_global_from_tiles(tile_maps, n_tile, tile_res, full_res):
@@ -132,6 +133,10 @@ def run_box_column_density_parallel(cfg, comm):
 
     snapshot = data_unpacker.load_snapshot(load_region=region)
 
+    #loading chimes table once to avoid repeated loading in each slice
+    chimes = chem.chimes(data_unpacker.chimes_table_path, 
+                ions_to_cache=cfg.chemistry.ion)
+
     if comm_rank == 0:
         print("Gas particles loaded (MPI tiled)")
 
@@ -152,6 +157,7 @@ def run_box_column_density_parallel(cfg, comm):
         cd_2d = density_profiles.column_density_2d_swift(
             cfg=cfg,
             data_unpacker=data_unpacker,
+            chimes=chimes,
             snapshot=snapshot,
             element=cfg.chemistry.element,
             mpi=True
