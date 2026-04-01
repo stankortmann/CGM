@@ -507,29 +507,27 @@ class column_density_2d_swift:
     def radial_column_density_profile(
         self,
         column_density_2d,
-        r_min=10*u.kpc,
-        r_max=100*u.kpc,        #kpc proper length
-        n_bins=50,
-        log_bins=False
+        log_range=None,
+        log_bins=None,
     ):
         """
         Compute radial column density profile N(r).
         """
 
         r = self.transverse_distance.to(self.cfg.galaxy.extend_unit).value
-        r_max=r_max.to(self.cfg.galaxy.extend_unit).value
-        r_min=r_min.to(self.cfg.galaxy.extend_unit).value
-        
 
         # Define bins
-        if log_bins:
-            bins = np.logspace(
-                np.log10(r[r > 0].min()),
-                np.log10(r_max),
-                n_bins + 1
+        if log_bins is not None and log_range is not None:
+            bins = np.linspace(
+                log_range[0],
+                log_range[1],
+                log_bins + 1
             )
+            r=np.log10(r)
         else:
-            bins = np.linspace(r_min, r_max, n_bins + 1)
+            bins = np.linspace(self.cfg.galaxy.range_transverse[0],
+             self.cfg.galaxy.range_transverse[1], 
+             self.cfg.galaxy.bins_transverse + 1)
 
         #how many pixels are in each radial bin
         pixels_per_bin, edges = np.histogram(
@@ -549,7 +547,7 @@ class column_density_2d_swift:
         r_inner = edges[:-1]
 
         # calculate the average column density in each annulus
-        column_density_average = np.divide(total_column_density_per_bin, pixels_per_bin, out=np.zeros_like(total_column_density_per_bin), where=pixels_per_bin!=0)
+        column_density_average = total_column_density_per_bin / pixels_per_bin
         column_density = column_density_average*u.Unit("1/cm**2")
 
         r_centers = 0.5 * (r_outer + r_inner)*u.Unit(self.cfg.galaxy.extend_unit)

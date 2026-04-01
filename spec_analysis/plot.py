@@ -84,13 +84,11 @@ class column_density_plotter:
         log_scale=True,
         ax=None
     ):
-
+        """Plot 2D column density map and return axis."""
         name = self._resolve_name(ion, element)
 
-        created_fig = False
         if ax is None:
-            fig, ax = plt.subplots(figsize=(7, 6))
-            created_fig = True
+            _, ax = plt.subplots(figsize=(7, 6))
 
         vlower = 10**self.cfg_plot.cd_log_range[0]
         vhigher = 10**self.cfg_plot.cd_log_range[1]
@@ -112,23 +110,8 @@ class column_density_plotter:
         ax.set_ylabel(rf"y [{self.length_unit}]")
         ax.set_title(f"Column density of {name}")
 
-        if created_fig:
-            cbar = plt.colorbar(mesh, ax=ax)
-            cbar.set_label(rf"$N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
-
-            plt.tight_layout()
-
-            cd_dir = self.output_dir / "column_density"
-            cd_dir.mkdir(parents=True, exist_ok=True)
-
-            file_path = cd_dir / f"{name}.png"
-
-            plt.savefig(file_path, dpi=300, bbox_inches="tight")
-            plt.close()
-
-            print("Finished", file_path)
-
-            return
+        cbar = plt.colorbar(mesh, ax=ax)
+        cbar.set_label(rf"$N_{{{name}}}\,[\mathrm{{cm}}^{{-2}}]$")
 
         return ax
 
@@ -203,14 +186,12 @@ class column_density_plotter:
         color=None,
         linestyle="-",
     ):
-        """Plot transverse/radial column density profile."""
+        """Plot transverse/radial column density profile and return axis."""
         if name is None:
             name = self._resolve_name(ion, element)
 
-        created_fig = False
         if ax is None:
-            fig, ax = plt.subplots(figsize=(7, 5))
-            created_fig = True
+            _, ax = plt.subplots(figsize=(7, 5))
 
         x = r_centers.to("kpc").value
         y = column_density.to("1/cm**2").value
@@ -226,23 +207,11 @@ class column_density_plotter:
             lw=2,
         )
         ax.set_xlabel("Transverse distance [kpc]")
-        ax.set_ylabel(r"$\log_{10}(N) [\mathrm{cm}^{-2}]$")
+        ax.set_ylabel(r"$\log_{10}(N [\mathrm{cm}^{-2}])$")
         ax.set_title(f"Transverse profile: {name}")
         ax.grid(alpha=0.3)
 
-        if created_fig:
-            if label:
-                ax.legend()
-            fig.tight_layout()
-
-            trans_dir = self.output_dir / "transverse_profiles"
-            trans_dir.mkdir(parents=True, exist_ok=True)
-
-            file_path = trans_dir / f"{name}_radial.png"
-            fig.savefig(file_path, dpi=300, bbox_inches="tight")
-            plt.close(fig)
-
-            print("Finished", file_path)
-            return
+        if label is not None:
+            ax.legend()
 
         return ax

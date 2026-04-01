@@ -10,27 +10,7 @@ import spec_analysis.chemistry as chem
 from spec_analysis import density_profiles, unpack_data, galaxy_selection as gal_sel, save_data
 
 
-def _save_transverse_plot(r_centers, profile, name, output_dir):
-    """Save radial average column density as function of transverse distance."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    file_path = output_dir / f"{name}_transverse.png"
 
-    x = r_centers.to("kpc").value
-    y = profile.to("1/cm**2").value
-
-    mask = np.isfinite(y) & (y > 0)
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.plot(x[mask], np.log10(y[mask]), lw=2)
-    ax.set_xlabel("Transverse distance [kpc]")
-    ax.set_ylabel(r"$\log_{10}(\langle N \rangle)\;[\mathrm{cm}^{-2}]$")
-    ax.set_title(f"Transverse average column density: {name}")
-    ax.grid(alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(file_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    print("Finished", file_path)
 
 
 def run_halo_column_density(cfg):
@@ -93,10 +73,7 @@ def run_halo_column_density(cfg):
     # Element transverse profile (from 2D projection map)
     r_centers, cd_profile = cd_2d.radial_column_density_profile(
         column_density_2d=n_element_column_density,
-        r_min=1 * u.kpc,
-        r_max=r_max,
-        n_bins=30,
-        log_bins=False,
+        
     )
     transverse_profiles[cfg.chemistry.element] = {
         "r_centers": r_centers,
@@ -111,10 +88,7 @@ def run_halo_column_density(cfg):
 
         ion_r_centers, ion_cd_profile = cd_2d.radial_column_density_profile(
             column_density_2d=n_ion_column_density,
-            r_min=1 * u.kpc,
-            r_max=r_max,
-            n_bins=30,
-            log_bins=False,
+            
         )
 
         transverse_profiles[ion] = {

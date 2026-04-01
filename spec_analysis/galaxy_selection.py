@@ -1,6 +1,7 @@
 import numpy as np
 from functools import cached_property
 from swiftgalaxy import SWIFTGalaxy, SOAP
+import unyt as u
 class gas_properties:
     pass
 
@@ -43,9 +44,27 @@ class single_galaxy:
         elif self.cfg.galaxy.selection == "random":
             total = len(self.halo_selection_field.gas_mass)
             idx = np.random.randint(0, total)
+        
+        elif self.cfg.galaxy.selection == "gas_mass_range":
+            gas_mass = self.halo_selection_field.gas_mass.to(u.Msun)
+            log_gas_mass = np.log10(gas_mass,out=np.zeros_like(gas_mass),where=(gas_mass>0))
+            mask = (log_gas_mass >= self.cfg.galaxy.mass_range[0]) & (log_gas_mass <= self.cfg.galaxy.mass_range[1])
+            idx = np.where(mask)[0]
+            if len(idx) == 0:
+                raise ValueError("No halos found in the specified gas mass range")
+            idx = np.random.choice(idx)
+
+        elif self.cfg.galaxy.selection == "total_mass":
+            total_mass = self.halo_selection_field.total_mass.to(u.Msun)
+            log_total_mass = np.log10(total_mass,out=np.zeros_like(total_mass),where=(total_mass>0))
+            mask = (log_total_mass >= self.cfg.galaxy.mass_range[0]) & (log_total_mass <= self.cfg.galaxy.mass_range[1])
+            idx = np.where(mask)[0]
+            if len(idx) == 0:
+                raise ValueError("No halos found in the specified total mass range")
+            idx = np.random.choice(idx)
 
         else:
-            raise ValueError("Unknown selection mode")
+            raise ValueError(f"Unknown selection mode {self.cfg.galaxy.selection}")
 
         self._retrieve_halo(idx)
 
@@ -139,7 +158,7 @@ class single_galaxy_gas_mask:
             idx = np.random.randint(0, total)
 
         else:
-            raise ValueError("Unknown selection mode")
+            raise ValueError(f"Unknown selection mode {self.cfg.galaxy.selection}")
 
         self._retrieve_halo(idx)
 
@@ -173,6 +192,8 @@ class single_galaxy_gas_mask:
         
         return mask
 
+
+
 #--- USES SWIFTGALAXY TO LOAD IN GAS PARTICLES, MASSIVE I/0 IMPROVEMENT!!---
 class single_galaxy_swift_galaxy:
 
@@ -184,13 +205,29 @@ class single_galaxy_swift_galaxy:
         self.halo_selection_field=getattr(self.halo_properties,data_unpacker.halo_selection_field)
 
         #loads halo and selects region for which to load in the gas
-        halo_index=self._select_halo()
+        halo_index = int(self._select_halo())
         self._retrieve_halo(halo_index)
         #load in the snapshot surrounding the centre of mass of the galaxy/halo
         self.snapshot=SWIFTGalaxy(
                     data_unpacker.gas_in_halo_properties_path,  # notice virtual_snapshot, not snapshot
-                    SOAP(data_unpacker.halo_properties_path, soap_index=halo_index),
+                    SOAP(data_unpacker.halo_properties_path, soap_index=halo_index)  
                 )
+
+        loaded_n_gas = int(np.asarray(self.snapshot.gas.masses).size)
+        expected_n_gas = None
+        if hasattr(self.halo_selection_field, "number_of_gas_particles"):
+            expected_n_gas = int(np.asarray(self.halo_selection_field.number_of_gas_particles[halo_index]).item())
+
+        print(
+            f"Selected halo catalogue_id={int(np.asarray(self.catalogue_id).item())}, "
+            f"expected_n_gas={expected_n_gas}, loaded_n_gas={loaded_n_gas}"
+        )
+
+        if loaded_n_gas == 0:
+            raise ValueError(
+                "Selected halo has zero gas particles in SWIFTGalaxy membership load. "
+                
+            )
        
 
        
@@ -201,6 +238,9 @@ class single_galaxy_swift_galaxy:
 
     
     def _select_halo(self):
+        n_gas = None
+        if hasattr(self.halo_selection_field, "number_of_gas_particles"):
+            n_gas = np.asarray(self.halo_selection_field.number_of_gas_particles)
         
         if self.cfg.galaxy.selection == "most_bound_particles":
             bound = self.halo_selection_field.number_of_gas_particles
@@ -208,16 +248,52 @@ class single_galaxy_swift_galaxy:
 
         elif self.cfg.galaxy.selection == "highest_gas_mass":
             gas_mass = self.halo_selection_field.gas_mass
-            idx = np.argmax(gas_mass)
+            if n_gas is not None:
+                valid_idx = np.where(n_gas > 0)[0]
+                if len(valid_idx) == 0:
+                    raise ValueError("No halos with number_of_gas_particles > 0 were found.")
+                idx = valid_idx[np.argmax(gas_mass[valid_idx])]
+            else:
+                idx = np.argmax(gas_mass)
 
         elif self.cfg.galaxy.selection == "random":
-            total = len(self.halo_selection_field.gas_mass)
-            idx = np.random.randint(0, total)
+            if n_gas is not None:
+                valid_idx = np.where(n_gas > 0)[0]
+                if len(valid_idx) == 0:
+                    raise ValueError("No halos with number_of_gas_particles > 0 were found.")
+                idx = np.random.choice(valid_idx)
+            else:
+                total = len(self.halo_selection_field.gas_mass)
+                idx = np.random.randint(0, total)
+        
+        elif self.cfg.galaxy.selection == "gas_mass_range":
+            gas_mass = self.halo_selection_field.gas_mass.to("Msun")
+            log_gas_mass = np.log10(gas_mass,out=np.zeros_like(gas_mass),where=(gas_mass>0))
+            mask = (log_gas_mass >= self.cfg.galaxy.mass_range[0]) & (log_gas_mass <= self.cfg.galaxy.mass_range[1])
+            if n_gas is not None:
+                mask = mask & (n_gas > 0)
+            idx = np.where(mask)[0]
+            if len(idx) == 0:
+                raise ValueError("No halos found in the specified gas mass range")
+            idx = np.random.choice(idx)
+            print(f"Selected halo index {idx} with gas mass {gas_mass[idx]:.2e}")
+
+        elif self.cfg.galaxy.selection == "total_mass":
+            total_mass = self.halo_selection_field.total_mass.to("Msun")
+            log_total_mass = np.log10(total_mass,out=np.zeros_like(total_mass),where=(total_mass>0))
+            mask = (log_total_mass >= self.cfg.galaxy.mass_range[0]) & (log_total_mass <= self.cfg.galaxy.mass_range[1])
+            if n_gas is not None:
+                mask = mask & (n_gas > 0)
+            idx = np.where(mask)[0]
+            if len(idx) == 0:
+                raise ValueError("No halos found in the specified total mass range")
+            idx = np.random.choice(idx)
+            print(f"Selected halo index {idx} with total mass {total_mass[idx]:.2e}")
 
         else:
-            raise ValueError("Unknown selection mode")
+            raise ValueError(f"Unknown selection mode: {self.cfg.galaxy.selection}")
 
-        return idx
+        return int(np.asarray(idx).item())
 
     # ==========================================================
     # Halo Properties (lazy)

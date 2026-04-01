@@ -106,8 +106,7 @@ def run_single_halo(cfg_plot: plot_config):
     if cd_data.halo is None:
         raise ValueError("Expected halo metadata in HDF5 file, but none found.")
 
-    output_dir = Path(data_unpacker.output_directory) / "replot"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    
 
     # Plot transverse profiles for element
     plotter = plot.column_density_plotter(
@@ -118,26 +117,165 @@ def run_single_halo(cfg_plot: plot_config):
         cfg_plot=cfg_plot,
     )
 
+    output_dir = Path(data_unpacker.output_directory)
+    trans_dir = output_dir / "transverse_profiles"/f"halo_{int(np.asarray(cd_data.halo['catalogue_id']).item())}"
+    trans_dir.mkdir(parents=True, exist_ok=True)
+
     if cd_data.element_name in cd_data.transverse_profiles:
         profile = cd_data.transverse_profiles[cd_data.element_name]
-        plotter.plot_radial_transverse(
+        ax = plotter.plot_radial_transverse(
             r_centers=profile["r_centers"],
             column_density=profile["column_density"],
             element=cd_data.element_name,
         )
+        ax.figure.tight_layout()
+        file_path = trans_dir / f"{cd_data.element_name}_radial.png"
+        ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+        plt.close(ax.figure)
+        print("Saved", file_path)
 
     # Plot transverse profiles for ions
     for ion in cd_data.ions.keys():
         if ion in cd_data.transverse_profiles:
             profile = cd_data.transverse_profiles[ion]
-            plotter.plot_radial_transverse(
+            ax = plotter.plot_radial_transverse(
                 r_centers=profile["r_centers"],
                 column_density=profile["column_density"],
                 ion=ion,
             )
+            ax.figure.tight_layout()
+            file_path = trans_dir / f"{ion}_radial.png"
+            ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+            plt.close(ax.figure)
+            print("Saved", file_path)
 
-    print(f"Halo {cd_data.halo['catalogue_id']} replot complete.")
+    print(f"Halo {cd_data.halo['catalogue_id']} plot complete.")
 
+    # --- 2D Column Density Histograms ---
+    if cfg_plot.plot_2d_histogram and cfg_plot.load_cd:
+        halo_id = int(np.asarray(cd_data.halo['catalogue_id']).item())
+        cd2d_dir = output_dir / "2d_column_density" / f"halo_{halo_id}"
+        cd2d_dir.mkdir(parents=True, exist_ok=True)
+
+        if hasattr(cd_data, 'element_cd') and cd_data.element_cd is not None:
+            ax = plotter.plot_xy(
+                column_density_values=cd_data.element_cd,
+                element=cd_data.element_name,
+                log_scale=True,
+                ax=None
+            )
+            ax.figure.tight_layout()
+            file_path = cd2d_dir / f"{cd_data.element_name}_2d.png"
+            ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+            plt.close(ax.figure)
+            print("Saved", file_path)
+
+        for ion in cd_data.ions.keys():
+            ion_cd = cd_data.ions[ion].get("column_density") if isinstance(cd_data.ions[ion], dict) else None
+            if ion_cd is not None:
+                ax = plotter.plot_xy(
+                    column_density_values=ion_cd,
+                    ion=ion,
+                    log_scale=True,
+                    ax=None
+                )
+                ax.figure.tight_layout()
+                file_path = cd2d_dir / f"{ion}_2d.png"
+                ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+                plt.close(ax.figure)
+                print("Saved", file_path)
+
+
+def run_multiple_halos(cfg_plot: plot_config):
+    """Replot multiple galaxies/halos with transverse radial profiles."""
+    for data_file in cfg_plot.data_files:
+        cd_data = single_cd(data_file, load_cd=cfg_plot.load_cd)
+        data_unpacker = unwrapper(cd_data.cfg)
+
+        if cd_data.halo is None:
+            raise ValueError("Expected halo metadata in HDF5 file, but none found.")
+
+        # Plot transverse profiles for element
+        plotter = plot.column_density_plotter(
+            cfg=cd_data.cfg,
+            data_unpacker=data_unpacker,
+            x_edges=cd_data.xedges,
+            y_edges=cd_data.yedges,
+            cfg_plot=cfg_plot,
+        )
+
+        output_dir = Path(data_unpacker.output_directory)
+        trans_dir = output_dir / "transverse_profiles"/f"halo_{int(np.asarray(cd_data.halo['catalogue_id']).item())}"
+        trans_dir.mkdir(parents=True, exist_ok=True)
+
+        if cd_data.element_name in cd_data.transverse_profiles:
+            profile = cd_data.transverse_profiles[cd_data.element_name]
+            ax = plotter.plot_radial_transverse(
+                r_centers=profile["r_centers"],
+                column_density=profile["column_density"],
+                element=cd_data.element_name,
+            )
+            ax.figure.tight_layout()
+            file_path = trans_dir / f"{cd_data.element_name}_radial.png"
+            ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+            plt.close(ax.figure)
+            print("Saved", file_path)
+
+        # Plot transverse profiles for ions
+        for ion in cd_data.ions.keys():
+            if ion in cd_data.transverse_profiles:
+                profile = cd_data.transverse_profiles[ion]
+                ax = plotter.plot_radial_transverse(
+                    r_centers=profile["r_centers"],
+                    column_density=profile["column_density"],
+                    ion=ion,
+                )
+                ax.figure.tight_layout()
+                file_path = trans_dir / f"{ion}_radial.png"
+                ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+                plt.close(ax.figure)
+                print("Saved", file_path)
+
+        print(f"Halo {cd_data.halo['catalogue_id']} plot complete.")
+
+        # --- 2D Column Density Histograms ---
+        if cfg_plot.plot_2d_histogram and cfg_plot.load_cd:
+            halo_id = int(np.asarray(cd_data.halo['catalogue_id']).item())
+            cd2d_dir = output_dir / "2d_column_density" / f"halo_{halo_id}"
+            cd2d_dir.mkdir(parents=True, exist_ok=True)
+
+            if hasattr(cd_data, 'element_cd') and cd_data.element_cd is not None:
+                ax = plotter.plot_xy(
+                    column_density_values=cd_data.element_cd,
+                    element=cd_data.element_name,
+                    log_scale=True,
+                    ax=None
+                )
+                ax.figure.tight_layout()
+                file_path = cd2d_dir / f"{cd_data.element_name}_2d.png"
+                ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+                plt.close(ax.figure)
+                print("Saved", file_path)
+            else:
+                print(f"No column density map found for element {cd_data.element_name} in halo {halo_id}, skipping 2D plot.")
+
+            for ion in cd_data.ions.keys():
+                ion_cd = cd_data.ions[ion].get("column_density") if isinstance(cd_data.ions[ion], dict) else None
+                if ion_cd is not None:
+                    ax = plotter.plot_xy(
+                        column_density_values=ion_cd,
+                        ion=ion,
+                        log_scale=True,
+                        ax=None
+                    )
+                    ax.figure.tight_layout()
+                    file_path = cd2d_dir / f"{ion}_2d.png"
+                    ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+                    plt.close(ax.figure)
+                    print("Saved", file_path)
+                else:
+                    print(f"No column density map found for ion {ion} in halo {halo_id}, skipping 2D plot.")
+    print("All halos plotted.")
 
 def run_single(cfg_plot: plot_config):
 

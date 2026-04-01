@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Union
 
 @dataclass
@@ -49,12 +49,17 @@ class Chemistry:
 @dataclass
 class Galaxy:
      
-     galaxy_window: str
-     extend_unit: float
-     extend_value: int
-     selection: str
-     #default
      single_galaxy: bool = False 
+     galaxy_window: str = None
+     extend_unit: float = "kpc"
+     extend_value: int = 400
+     range_transverse: List[float] = field(default_factory=lambda: [10.0, 300.0])
+     bins_transverse: int = 50     
+     selection: str = "random " 
+     mass_range: List[float] = None
+     
+     
+
 
      
 #important class that orders all the configurations
