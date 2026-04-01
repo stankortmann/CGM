@@ -312,6 +312,59 @@ class single_cd:
                     ion_data["column_density"] = None
 
                 self.ions[ion] = ion_data
+
+            # --- halo metadata (if available) ---
+            self.halo = None
+            if "halo" in f:
+                grp_halo = f["halo"]
+                self.halo = {
+                    "catalogue_id": grp_halo["catalogue_id"][()],
+                    "position": u.unyt_array(
+                        grp_halo["position"][:],
+                        units=grp_halo["position"].attrs.get("unit", "Mpc")
+                    ),
+                    "stellar_mass": u.unyt_quantity(
+                        grp_halo["stellar_mass"][()],
+                        grp_halo["stellar_mass"].attrs.get("unit", "Msun")
+                    ),
+                    "half_mass_radius_gas": u.unyt_quantity(
+                        grp_halo["half_mass_radius_gas"][()],
+                        grp_halo["half_mass_radius_gas"].attrs.get("unit", "Mpc")
+                    ),
+                }
+
+            # --- transverse radial profiles (nested in element/ion groups) ---
+            self.transverse_profiles = {}
+            
+            # Element transverse profile
+            if "transverse_profile" in grp_elem:
+                prof_grp = grp_elem["transverse_profile"]
+                self.transverse_profiles[element] = {
+                    "r_centers": u.unyt_array(
+                        prof_grp["r_centers"][:],
+                        units=prof_grp["r_centers"].attrs.get("unit", "kpc")
+                    ),
+                    "column_density": u.unyt_array(
+                        prof_grp["column_density"][:],
+                        units=prof_grp["column_density"].attrs.get("unit", "cm**-2")
+                    ),
+                }
+            
+            # Ion transverse profiles
+            for ion in self.cfg.chemistry.ion:
+                if ion in f and "transverse_profile" in f[ion]:
+                    prof_grp = f[ion]["transverse_profile"]
+                    self.transverse_profiles[ion] = {
+                        "r_centers": u.unyt_array(
+                            prof_grp["r_centers"][:],
+                            units=prof_grp["r_centers"].attrs.get("unit", "kpc")
+                        ),
+                        "column_density": u.unyt_array(
+                            prof_grp["column_density"][:],
+                            units=prof_grp["column_density"].attrs.get("unit", "cm**-2")
+                        ),
+                    }
+
     @property
     def simulation_name(self):
         feedback = f"{self.cfg.simulation.name}" 

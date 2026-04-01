@@ -190,3 +190,59 @@ class column_density_plotter:
 
        
         return ax
+
+    def plot_radial_transverse(
+        self,
+        r_centers,
+        column_density,
+        name=None,
+        element=None,
+        ion=None,
+        ax=None,
+        label=None,
+        color=None,
+        linestyle="-",
+    ):
+        """Plot transverse/radial column density profile."""
+        if name is None:
+            name = self._resolve_name(ion, element)
+
+        created_fig = False
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(7, 5))
+            created_fig = True
+
+        x = r_centers.to("kpc").value
+        y = column_density.to("1/cm**2").value
+
+        mask = np.isfinite(y) & (y > 0)
+
+        ax.plot(
+            x[mask],
+            np.log10(y[mask]),
+            label=label,
+            color=color,
+            linestyle=linestyle,
+            lw=2,
+        )
+        ax.set_xlabel("Transverse distance [kpc]")
+        ax.set_ylabel(r"$\log_{10}(N) [\mathrm{cm}^{-2}]$")
+        ax.set_title(f"Transverse profile: {name}")
+        ax.grid(alpha=0.3)
+
+        if created_fig:
+            if label:
+                ax.legend()
+            fig.tight_layout()
+
+            trans_dir = self.output_dir / "transverse_profiles"
+            trans_dir.mkdir(parents=True, exist_ok=True)
+
+            file_path = trans_dir / f"{name}_radial.png"
+            fig.savefig(file_path, dpi=300, bbox_inches="tight")
+            plt.close(fig)
+
+            print("Finished", file_path)
+            return
+
+        return ax

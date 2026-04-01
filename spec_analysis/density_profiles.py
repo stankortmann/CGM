@@ -323,8 +323,10 @@ class column_density_2d_swift:
             #stored as physical property, please get to comoving
             barrier = self.cfg.galaxy.extend.to_comoving()
             
-            return [ - barrier,  + barrier,
-                    - barrier,  + barrier]
+            return [ - barrier, 
+                     + barrier,
+                    - barrier,
+                      + barrier]
         else:
             return [self.cfg.window.x[0],
                     self.cfg.window.x[1],
@@ -335,9 +337,10 @@ class column_density_2d_swift:
     def xedges(self):
         xmin=self.projection_range[0]
         xmax=self.projection_range[1]
+        unit_length=xmin.units
         xedges=np.linspace(xmin.value,xmax.value,self.cfg.window.resolution+1)
         xedges_cosmo_array=cosmo_array(xedges,
-                                        u.Mpc,
+                                        unit_length,
                                         comoving=True,
                                         scale_factor=self.snapshot.metadata.scale_factor, 
                                         scale_exponent=1,  # distances scale as a**1, so the scale exponent is 1
@@ -349,9 +352,10 @@ class column_density_2d_swift:
     def yedges(self):
         ymin=self.projection_range[2]
         ymax=self.projection_range[3]
+        unit_length=ymin.units
         yedges=np.linspace(ymin.value,ymax.value,self.cfg.window.resolution+1)
         yedges_cosmo_array=cosmo_array(yedges,
-                                        u.Mpc,
+                                        unit_length,
                                         comoving=True,
                                         scale_factor=self.snapshot.metadata.scale_factor, 
                                         scale_exponent=1,  # distances scale as a**1, so the scale exponent is 1
@@ -493,9 +497,11 @@ class column_density_2d_swift:
         y_center_pixel = 0.5 * (self.yedges[1:] + self.yedges[:-1])
         grid_x, grid_y = np.meshgrid(x_center_pixel, y_center_pixel, indexing='ij')
         r = np.sqrt(grid_x**2 + grid_y**2)
+        print(f"Calculated transverse distances for each pixel, shape: {r.shape}")
+        print(f"Transverse distance range: {r.min()} - {r.max()}")
         
 
-        return r.to(self.length_unit) 
+        return r
 
 
     def radial_column_density_profile(
@@ -510,11 +516,9 @@ class column_density_2d_swift:
         Compute radial column density profile N(r).
         """
 
-        r = self.transverse_distance.to(self.length_unit).value
-        r_max=r_max.to(self.length_unit).value
-        r_min=r_min.to(self.length_unit).value
-        # Select weights
-        
+        r = self.transverse_distance.to(self.cfg.galaxy.extend_unit).value
+        r_max=r_max.to(self.cfg.galaxy.extend_unit).value
+        r_min=r_min.to(self.cfg.galaxy.extend_unit).value
         
 
         # Define bins
@@ -545,10 +549,10 @@ class column_density_2d_swift:
         r_inner = edges[:-1]
 
         # calculate the average column density in each annulus
-        column_density_average = total_column_density_per_bin / pixels_per_bin
+        column_density_average = np.divide(total_column_density_per_bin, pixels_per_bin, out=np.zeros_like(total_column_density_per_bin), where=pixels_per_bin!=0)
         column_density = column_density_average*u.Unit("1/cm**2")
 
-        r_centers = 0.5 * (r_outer + r_inner)*self.length_unit
+        r_centers = 0.5 * (r_outer + r_inner)*u.Unit(self.cfg.galaxy.extend_unit)
         
 
         return r_centers, column_density

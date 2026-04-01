@@ -21,6 +21,7 @@ class plot_config:
     slice_label: bool = False            # Whether to label the different slices in the legend
     plot_eagle: bool = False               # Whether to plot EAGLE CDDF for comparison
     eagle_cddf_directory: Optional[str] = None  # Path to the directory containing EAGLE CDDF files
+    galaxy_plot: bool = False              # Whether this plot is for a single galaxy (True) or multiple slices (False)
 
     def validate_paths(self):
         """

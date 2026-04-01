@@ -88,10 +88,10 @@ def run_halo_column_density(cfg):
     # --- Transverse radial profiles ---
     r_max = cfg.galaxy.extend.to_physical()
     transverse_profiles = {}
-    profile_plot_dir = Path(data_unpacker.output_directory) / "column_density" / "transverse"
+    
 
     # Element transverse profile (from 2D projection map)
-    r_centers, r_widths, cd_profile = cd_2d.radial_column_density_profile(
+    r_centers, cd_profile = cd_2d.radial_column_density_profile(
         column_density_2d=n_element_column_density,
         r_min=1 * u.kpc,
         r_max=r_max,
@@ -100,17 +100,16 @@ def run_halo_column_density(cfg):
     )
     transverse_profiles[cfg.chemistry.element] = {
         "r_centers": r_centers,
-        "r_widths": r_widths,
         "column_density": cd_profile,
     }
-    _save_transverse_plot(r_centers, cd_profile, cfg.chemistry.element, profile_plot_dir)
+    
 
     # Ions transverse profiles
     for ion in cfg.chemistry.ion:
         n_ion_column_density = cd_2d.column_density_ion(ion=ion).to_physical()
         ion_column_density_map[ion] = n_ion_column_density
 
-        ion_r_centers, ion_r_widths, ion_cd_profile = cd_2d.radial_column_density_profile(
+        ion_r_centers, ion_cd_profile = cd_2d.radial_column_density_profile(
             column_density_2d=n_ion_column_density,
             r_min=1 * u.kpc,
             r_max=r_max,
@@ -120,10 +119,9 @@ def run_halo_column_density(cfg):
 
         transverse_profiles[ion] = {
             "r_centers": ion_r_centers,
-            "r_widths": ion_r_widths,
             "column_density": ion_cd_profile,
         }
-        _save_transverse_plot(ion_r_centers, ion_cd_profile, ion, profile_plot_dir)
+        
 
     hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data" / str(cfg.chemistry.element)
     hdf5_dir.mkdir(parents=True, exist_ok=True)

@@ -96,6 +96,49 @@ def plot_eagle_cddf(ax, ion, cfg_plot):
 
 
 
+def run_single_halo(cfg_plot: plot_config):
+    """Replot a single galaxy/halo with transverse radial profiles."""
+    data_file = Path(cfg_plot.data_files[0])
+
+    cd_data = single_cd(data_file, load_cd=cfg_plot.load_cd)
+    data_unpacker = unwrapper(cd_data.cfg)
+
+    if cd_data.halo is None:
+        raise ValueError("Expected halo metadata in HDF5 file, but none found.")
+
+    output_dir = Path(data_unpacker.output_directory) / "replot"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Plot transverse profiles for element
+    plotter = plot.column_density_plotter(
+        cfg=cd_data.cfg,
+        data_unpacker=data_unpacker,
+        x_edges=cd_data.xedges,
+        y_edges=cd_data.yedges,
+        cfg_plot=cfg_plot,
+    )
+
+    if cd_data.element_name in cd_data.transverse_profiles:
+        profile = cd_data.transverse_profiles[cd_data.element_name]
+        plotter.plot_radial_transverse(
+            r_centers=profile["r_centers"],
+            column_density=profile["column_density"],
+            element=cd_data.element_name,
+        )
+
+    # Plot transverse profiles for ions
+    for ion in cd_data.ions.keys():
+        if ion in cd_data.transverse_profiles:
+            profile = cd_data.transverse_profiles[ion]
+            plotter.plot_radial_transverse(
+                r_centers=profile["r_centers"],
+                column_density=profile["column_density"],
+                ion=ion,
+            )
+
+    print(f"Halo {cd_data.halo['catalogue_id']} replot complete.")
+
+
 def run_single(cfg_plot: plot_config):
 
     data_file = Path(cfg_plot.data_files[0])

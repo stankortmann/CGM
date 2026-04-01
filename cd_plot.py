@@ -30,7 +30,8 @@ def load_cfg_plot(cfg_path: str) -> plot_config:
         slice_label=cfg_dict.get("slice_label", False),
         Z_label=cfg_dict.get("Z_label", False),
         plot_eagle=cfg_dict.get("plot_eagle", False),
-        eagle_cddf_directory=Path(cfg_dict.get("eagle_cddf_directory", None)) if cfg_dict.get("eagle_cddf_directory", None) else None
+        eagle_cddf_directory=Path(cfg_dict.get("eagle_cddf_directory", None)) if cfg_dict.get("eagle_cddf_directory", None) else None,
+        galaxy_plot=cfg_dict.get("galaxy_plot", False)
     )
 
     cfg_plot.validate_paths()
@@ -53,12 +54,17 @@ def main():
     data_files = cfg_plot.data_files
 
     # --- Decide whether to run single or multiple ---
-    if len(data_files) == 1:
+    if len(data_files) == 1 and not cfg_plot.galaxy_plot:
         print(f"Replotting single HDF5: {data_files[0]}")
         replot.run_single(cfg_plot)
-    else:
+    elif len(data_files) > 1 and not cfg_plot.galaxy_plot:
         print(f"Replotting multiple HDF5 files: {[str(f) for f in data_files]}")
         replot.run_multiple(cfg_plot)
+    elif len(data_files) == 1 and cfg_plot.galaxy_plot:
+        print(f"Replotting single galaxy HDF5: {data_files[0]}")
+        replot.run_single_halo(cfg_plot)
+    else:
+        raise ValueError("Invalid configuration: multiple files cannot be plotted as galaxy_plot=True")
 
 
 if __name__ == "__main__":

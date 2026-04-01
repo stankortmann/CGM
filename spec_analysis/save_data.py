@@ -404,25 +404,18 @@ class galaxy_projection_saver(projection_saver):
         ds_hmr = grp_halo.create_dataset("half_mass_radius_gas", data=float(np.asarray(hmr_gas.value).item()))
         ds_hmr.attrs["unit"] = str(hmr_gas.units)
 
-    def _write_transverse_profiles(self, handle, transverse_profiles):
-        """Write radial/transverse average column-density profiles."""
-        grp_trans = handle.create_group("transverse_profiles")
-
-        for name, profile in transverse_profiles.items():
-            grp_name = grp_trans.create_group(name)
-
-            r_centers = profile["r_centers"]
-            r_widths = profile["r_widths"]
-            column_density = profile["column_density"]
-
-            ds_r = self._write_array(grp_name, "r_centers", r_centers.value)
-            ds_r.attrs["unit"] = str(r_centers.units)
-
-            ds_w = self._write_array(grp_name, "r_widths", r_widths.value)
-            ds_w.attrs["unit"] = str(r_widths.units)
-
-            ds_cd = self._write_array(grp_name, "column_density", column_density.value)
-            ds_cd.attrs["unit"] = str(column_density.units)
+    def _write_transverse_profiles_to_element_group(self, grp_elem, profile):
+        """Write transverse profile within element group."""
+        grp_trans = grp_elem.create_group("transverse_profile")
+        
+        r_centers = profile["r_centers"]
+        column_density = profile["column_density"]
+        
+        ds_r = self._write_array(grp_trans, "r_centers", r_centers.value)
+        ds_r.attrs["unit"] = str(r_centers.units)
+        
+        ds_cd = self._write_array(grp_trans, "column_density", column_density.value)
+        ds_cd.attrs["unit"] = str(column_density.units)
 
     def save_galaxy_projection_file(
         self,
@@ -445,7 +438,21 @@ class galaxy_projection_saver(projection_saver):
 
         with h5py.File(file_path, "a") as f:
             self._write_halo_metadata(f, halo)
-            self._write_transverse_profiles(f, transverse_profiles)
+            
+            # Write transverse profiles nested within element/ion groups
+            element = self.cfg.chemistry.element
+            if element in transverse_profiles:
+                self._write_transverse_profiles_to_element_group(
+                    f[element],
+                    transverse_profiles[element]
+                )
+            
+            for ion in self.cfg.chemistry.ion:
+                if ion in transverse_profiles and ion in f:
+                    self._write_transverse_profiles_to_element_group(
+                        f[ion],
+                        transverse_profiles[ion]
+                    )
 
 
 # Backward-compatible module-level functions that wrap the class
