@@ -383,6 +383,71 @@ class projection_saver:
         return n_element_column_density, stitched_ions
 
 
+class galaxy_projection_saver(projection_saver):
+    """Projection saver extended with halo metadata and transverse profiles."""
+
+    def _write_halo_metadata(self, handle, halo):
+        """Store selected halo properties for traceability."""
+        grp_halo = handle.create_group("halo")
+
+        grp_halo.create_dataset("catalogue_id", data=int(np.asarray(halo.catalogue_id).item()))
+
+        pos = halo.position.to_physical()
+        ds_pos = self._write_array(grp_halo, "position", np.asarray(pos.value))
+        ds_pos.attrs["unit"] = str(pos.units)
+
+        stellar_mass = halo.stellar_mass.to_physical()
+        ds_stellar = grp_halo.create_dataset("stellar_mass", data=float(np.asarray(stellar_mass.value).item()))
+        ds_stellar.attrs["unit"] = str(stellar_mass.units)
+
+        hmr_gas = halo.half_mass_radius_gas.to_physical()
+        ds_hmr = grp_halo.create_dataset("half_mass_radius_gas", data=float(np.asarray(hmr_gas.value).item()))
+        ds_hmr.attrs["unit"] = str(hmr_gas.units)
+
+    def _write_transverse_profiles(self, handle, transverse_profiles):
+        """Write radial/transverse average column-density profiles."""
+        grp_trans = handle.create_group("transverse_profiles")
+
+        for name, profile in transverse_profiles.items():
+            grp_name = grp_trans.create_group(name)
+
+            r_centers = profile["r_centers"]
+            r_widths = profile["r_widths"]
+            column_density = profile["column_density"]
+
+            ds_r = self._write_array(grp_name, "r_centers", r_centers.value)
+            ds_r.attrs["unit"] = str(r_centers.units)
+
+            ds_w = self._write_array(grp_name, "r_widths", r_widths.value)
+            ds_w.attrs["unit"] = str(r_widths.units)
+
+            ds_cd = self._write_array(grp_name, "column_density", column_density.value)
+            ds_cd.attrs["unit"] = str(column_density.units)
+
+    def save_galaxy_projection_file(
+        self,
+        file_path,
+        cd_2d_obj,
+        element_column_density,
+        ion_column_density_map,
+        los_range_local,
+        halo,
+        transverse_profiles,
+    ):
+        """Save projection maps/CDDFs plus halo metadata and transverse profiles."""
+        self.save_projection_file(
+            file_path=file_path,
+            cd_2d_obj=cd_2d_obj,
+            element_column_density=element_column_density,
+            ion_column_density_map=ion_column_density_map,
+            los_range_local=los_range_local,
+        )
+
+        with h5py.File(file_path, "a") as f:
+            self._write_halo_metadata(f, halo)
+            self._write_transverse_profiles(f, transverse_profiles)
+
+
 # Backward-compatible module-level functions that wrap the class
 def save_projection_file(
     file_path,
@@ -442,4 +507,29 @@ def save_projection_file_tiled_mpi(
         y_max=y_max,
         map_tag_base=map_tag_base,
         skip_map_stitch=skip_map_stitch,
+    )
+
+
+def save_galaxy_projection_file(
+    file_path,
+    cfg,
+    cd_2d_obj,
+    element_column_density,
+    ion_column_density_map,
+    los_range_local,
+    halo,
+    transverse_profiles,
+    use_compression=False,
+    dtype=np.float64,
+):
+    """Module-level wrapper for galaxy projection save."""
+    saver = galaxy_projection_saver(cfg, use_compression=use_compression, dtype=dtype)
+    saver.save_galaxy_projection_file(
+        file_path=file_path,
+        cd_2d_obj=cd_2d_obj,
+        element_column_density=element_column_density,
+        ion_column_density_map=ion_column_density_map,
+        los_range_local=los_range_local,
+        halo=halo,
+        transverse_profiles=transverse_profiles,
     )

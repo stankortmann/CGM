@@ -1,11 +1,36 @@
-# cd_swift.py
+from pathlib import Path
 
-import unyt as u
-from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
+import matplotlib.pyplot as plt
 import numpy as np
-import gc
+import unyt as u
+from swiftsimio.objects import cosmo_quantity
 
-from spec_analysis import density_profiles, plot, unpack_data, galaxy_selection as gal_sel
+import spec_analysis.chemistry as chem
+
+from spec_analysis import density_profiles, unpack_data, galaxy_selection as gal_sel, save_data
+
+
+def _save_transverse_plot(r_centers, profile, name, output_dir):
+    """Save radial average column density as function of transverse distance."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_path = output_dir / f"{name}_transverse.png"
+
+    x = r_centers.to("kpc").value
+    y = profile.to("1/cm**2").value
+
+    mask = np.isfinite(y) & (y > 0)
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(x[mask], np.log10(y[mask]), lw=2)
+    ax.set_xlabel("Transverse distance [kpc]")
+    ax.set_ylabel(r"$\log_{10}(\langle N \rangle)\;[\mathrm{cm}^{-2}]$")
+    ax.set_title(f"Transverse average column density: {name}")
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(file_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    print("Finished", file_path)
 
 
 def run_halo_column_density(cfg):
@@ -33,12 +58,14 @@ def run_halo_column_density(cfg):
         scale_factor=data_unpacker.scale_factor,
         scale_exponent=1
     )
-
+    # Single-process execution (no MPI), with threading enabled inside project_gas.
+    chimes = chem.chimes(data_unpacker.chimes_table_path, ions_to_cache=cfg.chemistry.ion)
+     
     # Select single galaxy/halo
     single_galaxy = gal_sel.single_galaxy_swift_galaxy(cfg=cfg, data_unpacker=data_unpacker)
     print("Galaxy is selected")
 
-    # Projection axis range for CDDF
+    # Full line-of-sight range through the selected halo region.
     halo_proj_axis = {
         "x": single_galaxy.mask[0],
         "y": single_galaxy.mask[1],
@@ -46,71 +73,73 @@ def run_halo_column_density(cfg):
     }
     halo_proj_range = halo_proj_axis[cfg.window.projection_axis]
 
-    # --- 2D Column Density ---
     cd_2d = density_profiles.column_density_2d_swift(
         cfg=cfg,
         data_unpacker=data_unpacker,
+        chimes=chimes,
         element=cfg.chemistry.element,
         halo=single_galaxy
     )
     print("2D column density class is set up")
 
-    n_element_column_density = cd_2d.element_column_density
+    n_element_column_density = cd_2d.element_column_density.to_physical()
+    ion_column_density_map = {}
 
-    # Plotter
-    plotter = plot.column_density_plotter(
-        x_edges=cd_2d.xedges,
-        y_edges=cd_2d.yedges,
-        length_unit="Mpc",
-        data_unpacker=data_unpacker
+    # --- Transverse radial profiles ---
+    r_max = cfg.galaxy.extend.to_physical()
+    transverse_profiles = {}
+    profile_plot_dir = Path(data_unpacker.output_directory) / "column_density" / "transverse"
+
+    # Element transverse profile (from 2D projection map)
+    r_centers, r_widths, cd_profile = cd_2d.radial_column_density_profile(
+        column_density_2d=n_element_column_density,
+        r_min=1 * u.kpc,
+        r_max=r_max,
+        n_bins=30,
+        log_bins=False,
     )
+    transverse_profiles[cfg.chemistry.element] = {
+        "r_centers": r_centers,
+        "r_widths": r_widths,
+        "column_density": cd_profile,
+    }
+    _save_transverse_plot(r_centers, cd_profile, cfg.chemistry.element, profile_plot_dir)
 
-    # --- ELEMENT --- 2D
-    plotter.plot_xy(
-        column_density_values=n_element_column_density.to("1/cm**2").value,
-        element=cfg.chemistry.element,
-        log_scale=True
-    )
-
-    # --- ELEMENT CDDF ---
-    element_cddf, element_bin_centers, element_bin_width = cd_2d.column_density_distribution_function(
-        ion=None,
-        log_column_density_range=None,
-        n_bins=100,
-        los_range=halo_proj_range
-    )
-
-    plotter.plot_cddf_hist(
-        cddf=element_cddf,
-        bin_centers=element_bin_centers,
-        bin_width=element_bin_width,
-        element=cfg.chemistry.element
-    )
-
-    # --- IONS ---
+    # Ions transverse profiles
     for ion in cfg.chemistry.ion:
-        n_ion_column_density = cd_2d.column_density_ion(ion=ion)
+        n_ion_column_density = cd_2d.column_density_ion(ion=ion).to_physical()
+        ion_column_density_map[ion] = n_ion_column_density
 
-        # 2D plot
-        plotter.plot_xy(
-            column_density_values=n_ion_column_density.to("1/cm**2").value,
-            ion=ion,
-            log_scale=True
+        ion_r_centers, ion_r_widths, ion_cd_profile = cd_2d.radial_column_density_profile(
+            column_density_2d=n_ion_column_density,
+            r_min=1 * u.kpc,
+            r_max=r_max,
+            n_bins=30,
+            log_bins=False,
         )
 
-        # CDDF
-        ion_cddf, ion_bin_centers, ion_bin_width = cd_2d.column_density_distribution_function(
-            ion=ion,
-            ion_column_density=n_ion_column_density,
-            log_column_density_range=None,
-            n_bins=100,
-            los_range=halo_proj_range
-        )
+        transverse_profiles[ion] = {
+            "r_centers": ion_r_centers,
+            "r_widths": ion_r_widths,
+            "column_density": ion_cd_profile,
+        }
+        _save_transverse_plot(ion_r_centers, ion_cd_profile, ion, profile_plot_dir)
 
-        plotter.plot_cddf_hist(
-            cddf=ion_cddf,
-            bin_centers=ion_bin_centers,
-            bin_width=ion_bin_width,
-            ion=ion,
-            range_plot=None
-        )
+    hdf5_dir = Path(data_unpacker.output_directory) / "hdf5_data" / str(cfg.chemistry.element)
+    hdf5_dir.mkdir(parents=True, exist_ok=True)
+    hdf5_path = hdf5_dir / f"halo_{int(np.asarray(single_galaxy.catalogue_id).item())}.hdf5"
+
+    save_data.save_galaxy_projection_file(
+        file_path=hdf5_path,
+        cfg=cfg,
+        cd_2d_obj=cd_2d,
+        element_column_density=n_element_column_density,
+        ion_column_density_map=ion_column_density_map,
+        los_range_local=halo_proj_range,
+        halo=single_galaxy,
+        transverse_profiles=transverse_profiles,
+        use_compression=True,
+        dtype=np.float32,
+    )
+
+    print("All data and cfg settings saved to", hdf5_path)

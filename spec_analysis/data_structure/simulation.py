@@ -32,25 +32,29 @@ class Window:
     x: List[float]
     y: List[float]
     z: List[float]
-    projection_axis: str
-    projection_slices: int
+    
     resolution: int
     z_center: float
     z_range: List[float]
+    #defaulted
+    projection_axis: str = "z"
+    projection_slices: int =1
 
 @dataclass
 class Chemistry:
      element: Union[str, List[str]]
      ion: Union[str, List[str]]
-     metallicity: bool
+     metallicity: bool = True
     
 @dataclass
 class Galaxy:
-     single_galaxy: bool 
+     
      galaxy_window: str
      extend_unit: float
      extend_value: int
      selection: str
+     #default
+     single_galaxy: bool = False 
 
      
 #important class that orders all the configurations
