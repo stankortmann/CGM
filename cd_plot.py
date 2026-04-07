@@ -4,7 +4,7 @@ import argparse
 import yaml
 from pathlib import Path
 from spec_analysis.data_structure.plot import plot_config
-from spec_analysis.column_density import replot
+from spec_analysis.column_density import plotter
 
 
 def load_cfg_plot(cfg_path: str) -> plot_config:
@@ -57,19 +57,19 @@ def main():
     # --- Decide whether to run single or multiple ---
     if len(data_files) == 1 and not cfg_plot.galaxy_plot:
         print(f"Replotting single HDF5: {data_files[0]}")
-        replot.run_single(cfg_plot)
+        plotter.run_single(cfg_plot)
 
     elif len(data_files) > 1 and not cfg_plot.galaxy_plot:
         print(f"Replotting multiple HDF5 files: {[str(f) for f in data_files]}")
-        replot.run_multiple(cfg_plot)
+        plotter.run_multiple(cfg_plot)
 
     elif len(data_files) == 1 and cfg_plot.galaxy_plot:
         print(f"Replotting single galaxy HDF5: {data_files[0]}")
-        replot.run_single_halo(cfg_plot)
+        plotter.run_single_halo(cfg_plot)
     
     elif len(data_files) > 1 and cfg_plot.galaxy_plot:
         print(f"Replotting multiple galaxy HDF5 files: {[str(f) for f in data_files]}")
-        replot.run_multiple_halos(cfg_plot)
+        plotter.run_multiple_halos(cfg_plot)
     else:
         raise ValueError("Invalid configuration: check that hdf5_files is set correctly and galaxy_plot flag is consistent.")
 

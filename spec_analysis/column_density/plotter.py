@@ -36,7 +36,7 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
     line_style = "-"
     
 
-    if getattr(cfg_plot, "stack_total_label", False) and not getattr(cfg_plot, "slice_label", False):
+    if getattr(cfg_plot, "stack_total_label", False) :
         stem = Path(cd_data.hdf5_path).stem
         if not label.endswith(stem):
             if stem == "total":
@@ -44,10 +44,10 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
             if stem == "stacked": 
                 name = f"{cd_data.cfg.simulation.box_length/cd_data.cfg.window.projection_slices:.2f} cMpc slice average"
             label = f"{label} [{name}]"
-        if stem == "stacked":
+        if stem == "total":
             line_style = "--"
             
-    if getattr(cfg_plot, "Z_label", False):
+    elif getattr(cfg_plot, "Z_label", False):
 
         if getattr(cd_data.cfg.chemistry, "metallicity", True):
             name = "" #Maybe another tag but for now empty
@@ -57,7 +57,7 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
         
         label = f"{label} {name}"
         
-    if getattr(cfg_plot, "slice_label", False):
+    elif getattr(cfg_plot, "slice_label", False) and  not getattr(cfg_plot, "stack_total_label", False):
         if hasattr(cd_data.cfg.window, "projection_slices"):
             name = f"{cd_data.cfg.simulation.box_length/cd_data.cfg.window.projection_slices:.2f} cMpc slice average"
             label = f"{label} [{name}]"
