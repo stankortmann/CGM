@@ -97,7 +97,7 @@ class short_spectra:
 
             ion_tag = self._safe_name(ion)
             element_tag = self._safe_name(element)
-            out_file = os.path.join(los_dir, f"{element_tag}/{ion_tag}/data.png")
+            out_file = os.path.join(los_dir, f"individual/{element_tag}/{ion_tag}.png")
             os.makedirs(os.path.dirname(out_file), exist_ok=True)
             fig.savefig(out_file, dpi=300, bbox_inches="tight")
             plt.close(fig)

@@ -9,7 +9,7 @@ from spectra.short_spectra import short_spectra
 
 
 
-DEFAULT_YAML = "/cosma/home/do012/dc-kort1/CGM/configurations/specwizard/template/spec.yaml"
+DEFAULT_YAML = "/cosma/home/do012/dc-kort1/CGM/configurations/spectra/short/L25/z0.yaml"
 
 
 def parse_nsight_range(values):
