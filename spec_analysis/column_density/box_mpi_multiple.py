@@ -149,12 +149,14 @@ def run_slice_column_density_parallel(cfg, comm):
 
         original_x = cfg.window.x
         original_y = cfg.window.y
+        original_z = cfg.window.z
         original_resolution = cfg.window.resolution
 
         try:
             # Compute only the rank-local tile map to avoid full-grid memory on each rank.
             cfg.window.x = core_x
             cfg.window.y = core_y
+            cfg.window.z = slice_proj_range
             cfg.window.resolution = tile_resolution
 
             cd_2d = density_profiles.column_density_2d_swift(
@@ -175,6 +177,7 @@ def run_slice_column_density_parallel(cfg, comm):
         finally:
             cfg.window.x = original_x
             cfg.window.y = original_y
+            cfg.window.z = original_z
             cfg.window.resolution = original_resolution
 
         if verbose_ranks:

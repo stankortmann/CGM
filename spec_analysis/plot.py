@@ -215,3 +215,51 @@ class column_density_plotter:
             ax.legend()
 
         return ax
+
+    def plot_cddf_difference(
+        self,
+        ax,
+        sim_bin_centers,
+        sim_cddf,
+        eagle_x,
+        eagle_log_cddf,
+        label,
+        linestyle="-",
+        color=None,
+    ):
+        """Plot delta log10(CDDF) = simulation - EAGLE at EAGLE x locations."""
+        sim_bin_centers = np.asarray(sim_bin_centers, dtype=float)
+        sim_cddf = np.asarray(sim_cddf, dtype=float)
+        eagle_x = np.asarray(eagle_x, dtype=float)
+        eagle_log_cddf = np.asarray(eagle_log_cddf, dtype=float)
+
+        valid_sim = np.isfinite(sim_bin_centers) & np.isfinite(sim_cddf) & (sim_cddf > 0)
+        if valid_sim.sum() < 2:
+            return ax
+
+        sim_x = sim_bin_centers[valid_sim]
+        sim_log_cddf = np.log10(sim_cddf[valid_sim])
+
+        order = np.argsort(sim_x)
+        sim_x = sim_x[order]
+        sim_log_cddf = sim_log_cddf[order]
+
+        in_range = (
+            np.isfinite(eagle_x)
+            & np.isfinite(eagle_log_cddf)
+            & (eagle_x >= sim_x.min())
+            & (eagle_x <= sim_x.max())
+        )
+        if in_range.sum() == 0:
+            return ax
+
+        x_eval = eagle_x[in_range]
+        eagle_eval = eagle_log_cddf[in_range]
+        sim_interp = np.interp(x_eval, sim_x, sim_log_cddf)
+        delta = sim_interp - eagle_eval
+
+        ax.plot(x_eval, delta, label=label, linestyle=linestyle, color=color)
+        ax.axhline(0.0, color="black", lw=1.0, alpha=0.6)
+        ax.set_xlabel(r"$\log_{10}(N) [cm^{-2}]$")
+        ax.set_ylabel(r"$\Delta\log_{10} f(N)$ (COLIBRE - EAGLE)")
+        return ax

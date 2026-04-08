@@ -334,6 +334,33 @@ class column_density_2d_swift:
                     self.cfg.window.y[1]]
 
     @cached_property
+    def los_selection_mask(self):
+        """Exact LOS membership mask for the current projection slice/window."""
+        axis = self.cfg.window.projection_axis
+        axis_map = {"x": 0, "y": 1, "z": 2}
+        if axis not in axis_map:
+            raise ValueError(f"Unknown projection axis: {axis}")
+
+        bounds_map = {
+            "x": self.cfg.window.x,
+            "y": self.cfg.window.y,
+            "z": self.cfg.window.z,
+        }
+        lower, upper = bounds_map[axis]
+
+        coords = self.gas_particles.coordinates.to_comoving()
+        coord_axis = coords[:, axis_map[axis]]
+
+        lower_val = lower.to(coord_axis.units)
+        upper_val = upper.to(coord_axis.units)
+
+        if upper_val >= lower_val:
+            return (coord_axis >= lower_val) & (coord_axis < upper_val)
+
+        # Wrapped interval (periodic boundary crossing).
+        return (coord_axis >= lower_val) | (coord_axis < upper_val)
+
+    @cached_property
     def xedges(self):
         xmin=self.projection_range[0]
         xmax=self.projection_range[1]
@@ -380,7 +407,16 @@ class column_density_2d_swift:
     @cached_property
     def element_column_density(self):
         #ensure comoving as the snapshot data is in comoving coordinates
-        element_number=self.n_element.to_comoving() 
+        element_number=self.n_element.to_comoving()
+        # Zero contributions outside the exact LOS slice to avoid cell-mask leakage.
+        element_values = np.asarray(element_number.value)
+        element_values = np.where(self.los_selection_mask, element_values, 0.0)
+        element_number = cosmo_array(
+            element_values,
+            units=element_number.units,
+            comoving=element_number.comoving,
+            cosmo_factor=element_number.cosmo_factor,
+        )
         #just take the median, rescaling ensures no float overflow
         scale = np.percentile(element_number.value, 90)
         if scale <= 0:
@@ -421,6 +457,16 @@ class column_density_2d_swift:
 
             n_ion = self.n_element.to_comoving() * 10**log_frac
             
+        # Zero contributions outside the exact LOS slice to avoid cell-mask leakage.
+        n_ion_values = np.asarray(n_ion.value)
+        n_ion_values = np.where(self.los_selection_mask, n_ion_values, 0.0)
+        n_ion = cosmo_array(
+            n_ion_values,
+            units=n_ion.units,
+            comoving=n_ion.comoving,
+            cosmo_factor=n_ion.cosmo_factor,
+        )
+
         scale = np.percentile(n_ion.value, 90)
         if scale <= 0:
             scale = 1.0

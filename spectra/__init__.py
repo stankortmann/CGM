@@ -1,1 +1,1 @@
-from .short_spectra import ShortSpectra
+from .short_spectra import short_spectra

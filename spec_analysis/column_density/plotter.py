@@ -65,25 +65,43 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
     return label, line_style
 
 
+def load_eagle_cddf(ion, cfg_plot):
+    """Return EAGLE CDDF points as (logN, log10f) or None if unavailable."""
+    if not getattr(cfg_plot, "plot_eagle", False):
+        return None
+
+    if getattr(cfg_plot, "eagle_cddf_directory", None) is None:
+        return None
+
+    file_path = Path(cfg_plot.eagle_cddf_directory) / f"{ion}.csv"
+    if not file_path.exists():
+        print(f"EAGLE file not found for {ion}, skipping.")
+        return None
+
+    data = np.loadtxt(file_path, delimiter=",")
+    if data.ndim == 1:
+        data = np.atleast_2d(data)
+    if data.shape[1] < 2:
+        print(f"EAGLE file for {ion} has unexpected format, skipping.")
+        return None
+
+    return data[:, 0], data[:, 1]
+
+
 def plot_eagle_cddf(ax, ion, cfg_plot):
     """
     Overlay EAGLE CDDF data if cfg_plot.plot_eagle is True
     and the corresponding CSV file exists.
     """
-    if not getattr(cfg_plot, "plot_eagle", False):
+    eagle_data = load_eagle_cddf(ion, cfg_plot)
+    if eagle_data is None:
         return ax
 
-    file_path = cfg_plot.eagle_cddf_directory / f"{ion}.csv"
-
-    if not file_path.exists():
-        print(f"EAGLE file not found for {ion}, skipping.")
-        return ax
-
-    data = np.loadtxt(file_path, delimiter=",")
+    eagle_x, eagle_y = eagle_data
 
     ax.scatter(
-        data[:, 0],
-        data[:, 1],
+        eagle_x,
+        eagle_y,
         label="EAGLE (L100/m6 [6.25 cMpc slice average])",
         marker="x",
         s=20,
@@ -92,8 +110,6 @@ def plot_eagle_cddf(ax, ion, cfg_plot):
     )
 
     return ax
-
-
 
 
 def run_single_halo(cfg_plot: plot_config):
@@ -313,7 +329,7 @@ def run_single(cfg_plot: plot_config):
     # -------------------------
 
     ax = plotter.plot_cddf_hist(
-        cddf=cd_data.element_cddf*16,
+        cddf=cd_data.element_cddf,
         bin_centers=cd_data.element_bin_centers,
         bin_width=cd_data.element_bin_width,
         element=cd_data.element_name,
@@ -355,7 +371,7 @@ def run_single(cfg_plot: plot_config):
         """
 
         ax = plotter.plot_cddf_hist(
-            cddf=cd_data.ions[ion]["cddf"]*16,
+            cddf=cd_data.ions[ion]["cddf"],
             bin_centers=cd_data.ions[ion]["bin_centers"],
             bin_width=cd_data.ions[ion]["bin_width"],
             ion=ion,
@@ -383,6 +399,29 @@ def run_single(cfg_plot: plot_config):
 
         print("Saved", file_path)
 
+        if getattr(cfg_plot, "plot_eagle", False):
+            eagle_data = load_eagle_cddf(ion, cfg_plot)
+            if eagle_data is not None:
+                eagle_x, eagle_y = eagle_data
+                fig_diff, ax_diff = plt.subplots(figsize=(7, 6))
+                ax_diff = plotter.plot_cddf_difference(
+                    ax=ax_diff,
+                    sim_bin_centers=cd_data.ions[ion]["bin_centers"],
+                    sim_cddf=cd_data.ions[ion]["cddf"] * 16,
+                    eagle_x=eagle_x,
+                    eagle_log_cddf=eagle_y,
+                    label=label,
+                    linestyle=line_style,
+                )
+                ax_diff.legend()
+                ax_diff.set_title(f"CDDF difference vs EAGLE of {ion}")
+                fig_diff.tight_layout()
+                diff_path = output_dir /f"{ion}_delta_vs_eagle.png"
+                diff_path.parent.mkdir(parents=True, exist_ok=True)
+                fig_diff.savefig(diff_path, dpi=300, bbox_inches="tight")
+                plt.close(fig_diff)
+                print("Saved", diff_path)
+
     print(f"Finished replotting single HDF5: {data_file}")
 
 
@@ -400,6 +439,8 @@ def run_multiple(cfg_plot):
     """
     element_ax_dict = {}
     ion_ax_dict = {}
+    ion_diff_ax_dict = {}
+    eagle_data_cache = {}
     simulation_color_map = {}
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0"])
 
@@ -474,6 +515,27 @@ def run_multiple(cfg_plot):
             
             ion_ax_dict[ion] = ax_ion
 
+            if getattr(cfg_plot, "plot_eagle", False):
+                if ion not in eagle_data_cache:
+                    eagle_data_cache[ion] = load_eagle_cddf(ion, cfg_plot)
+                eagle_data = eagle_data_cache[ion]
+                if eagle_data is not None:
+                    eagle_x, eagle_y = eagle_data
+                    ax_diff = ion_diff_ax_dict.get(ion)
+                    if ax_diff is None:
+                        _, ax_diff = plt.subplots(figsize=(7, 6))
+                    ax_diff = plotter.plot_cddf_difference(
+                        ax=ax_diff,
+                        sim_bin_centers=cd_data.ions[ion]["bin_centers"],
+                        sim_cddf=cd_data.ions[ion]["cddf"],
+                        eagle_x=eagle_x,
+                        eagle_log_cddf=eagle_y,
+                        label=label,
+                        linestyle=line_style,
+                        color=line_color,
+                    )
+                    ion_diff_ax_dict[ion] = ax_diff
+
     # --- Save combined element CDDF plot ---
 
     output_dir = Path(cfg_plot.data_directory) /cfg_plot.output_directory / f"CDDF_{cfg_plot.label_criterion}"
@@ -498,3 +560,14 @@ def run_multiple(cfg_plot):
         ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close(ax.figure)
         print(f"Saved combined ion CDDF: {file_path}")
+
+    if getattr(cfg_plot, "plot_eagle", False):
+        for ion_name, ax in ion_diff_ax_dict.items():
+            ax.legend()
+            ax.set_title(f"CDDF difference vs EAGLE of {ion_name}")
+            plt.tight_layout()
+            file_path = output_dir /f"{ion_name}_delta_vs_eagle.png"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
+            plt.close(ax.figure)
+            print(f"Saved combined ion CDDF difference: {file_path}")

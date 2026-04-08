@@ -50,23 +50,26 @@ class short_spectra:
         los_num = wizard.get("sightline", {}).get("nsight", "unknown")
         los_dir = os.path.join(self.output_dir, los_file_tag, f"los_{los_num}")
         os.makedirs(los_dir, exist_ok=True)
-
+        print("printing the column density for the ions")
         for element, ion in elementnames:
             od = optical_depth[(element, ion)]["Optical depths"]["Value"]
-            print("printing the column density for the ions")
             nion = optical_depth[(element, ion)]["TotalIonColumnDensity"]["Value"]
             print(element, ion, np.log10(nion))
             element_density = projected_data["Element-weighted"][element]["Densities"]["Value"]
             ion_density = projected_data["Ion-weighted"][ion]["Densities"]["Value"]
             ion_mass = wizard["ionparams"]["transitionparams"][ion]["Mass"] * self.constants["amu"]
             ion_number_density = (ion_density / ion_mass).in_cgs()
+            tau_weighted_particle_density = (optical_depth[(element, ion)]["Densities"]["Value"] / ion_mass).in_cgs()
 
             with np.errstate(divide="ignore", invalid="ignore"):
                 ratio = np.where(element_density > 0, ion_density / element_density, np.nan)
                 log_ratio = np.log10(ratio)
                 log_ion_number_density = np.log10(np.where(ion_number_density.value > 0, ion_number_density.value, np.nan))
+                log_tau_weighted_particle_density = np.log10(
+                    np.where(tau_weighted_particle_density.value > 0, tau_weighted_particle_density.value, np.nan)
+                )
             redshift = str(round(wizard["Header"]["Cosmo"]["Redshift"], 2))
-            fig, ax = plt.subplots(4, 1, figsize=(20, 16))
+            fig, ax = plt.subplots(5, 1, figsize=(20, 20))
 
             ax[0].plot(od, color="k")
             ax[0].set_title(rf"{element} {ion} at redshift {redshift} with Log N [$cm^{{-2}}$] = {np.log10(nion):.2f}", fontsize=fontsize)
@@ -85,6 +88,10 @@ class short_spectra:
             ax[3].plot(pixz, log_ion_number_density, color="tab:purple")
             ax[3].set_ylabel(r"$\log_{10}(n_{\rm ion}\,[{\rm cm}^{-3}])$", fontsize=fontsize)
             ax[3].set_xlabel(r"$z$ [Mpc]", fontsize=fontsize)
+
+            ax[4].plot(pixz, log_tau_weighted_particle_density, color="tab:red")
+            ax[4].set_ylabel(r"$\log_{10}(n_{\rm ion,\tau}\,[{\rm cm}^{-3}])$", fontsize=fontsize)
+            ax[4].set_xlabel(r"$z$ [Mpc]", fontsize=fontsize)
 
             fig.tight_layout()
 
