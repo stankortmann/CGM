@@ -1,10 +1,9 @@
 import argparse
 import copy
-import os
-import sys
 
 import specwizard
 
+from spectra.long_spectra import long_spectra
 from spectra.short_spectra import short_spectra
 
 
@@ -32,32 +31,67 @@ def parse_nsight_range(values):
     return start, stop
 
 
+class spectrum_builder:
+    def __init__(self, config_path):
+        self.config_path = config_path
+        self._wizard = None
+
+    @property
+    def wizard(self):
+        if self._wizard is None:
+            build_input = specwizard.Build_Input()
+            self._wizard = build_input.read_from_yml(yml_file=self.config_path)
+        return self._wizard
+
+    def run_short_range(self, start, stop):
+        for nsight in range(start, stop + 1):
+            wizard = copy.deepcopy(self.wizard)
+            wizard.setdefault("sightline", {})["nsight"] = nsight
+            print(f"Running short spectra for sightline {nsight}")
+            short_spectra(wizard).run()
+
+    def run_long(self):
+        print("Running long spectra")
+        runner = long_spectra(copy.deepcopy(self.wizard))
+        return runner.run()
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Build spectra for a range of sightlines")
+    parser = argparse.ArgumentParser(description="Build short or long spectra")
+
+    parser.add_argument(
+        "--mode",
+        choices=["short", "long"],
+        default="short",
+        help="Which spectra pipeline to run",
+    )
     parser.add_argument(
         "--config",
         default=DEFAULT_YAML,
         help="Path to the specwizard YAML file",
     )
+
+    
     parser.add_argument(
         "--nsight-range",
         nargs="+",
-        required=True,
         metavar=("START", "STOP"),
-        help="Inclusive range of sightline numbers to run; use 'START STOP' or 'START,STOP'",
+        help="Inclusive short-spectra sightline range; use 'START STOP' or 'START,STOP'",
     )
+
+
     args = parser.parse_args()
 
-    start, stop = parse_nsight_range(args.nsight_range)
+    builder = spectrum_builder(config_path=args.config)
 
-    build_input = specwizard.Build_Input()
-    base_wizard = build_input.read_from_yml(yml_file=args.config)
+    if args.mode == "short":
+        if args.nsight_range is None:
+            parser.error("--nsight-range is required in --mode short")
+        start, stop = parse_nsight_range(args.nsight_range)
+        builder.run_short_range(start, stop)
+        return
 
-    for nsight in range(start, stop + 1):
-        wizard = copy.deepcopy(base_wizard)
-        wizard.setdefault("sightline", {})["nsight"] = nsight
-        print(f"Running sightline {nsight}")
-        short_spectra(wizard).run()
+    builder.run_long()
 
 
 if __name__ == "__main__":
