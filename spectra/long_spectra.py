@@ -28,6 +28,21 @@ class long_spectra:
             os.makedirs(out_dir, exist_ok=True)
         return out_dir
 
+    def _run_output_dir(self, coven):
+        run_dir = self.output_dir
+        os.makedirs(run_dir, exist_ok=True)
+        #make numeric subdirectory for each run to avoid overwriting previous runs
+        numeric_subdirs = []
+        for name in os.listdir(run_dir):
+            full_path = os.path.join(run_dir, name)
+            if os.path.isdir(full_path) and name.isdigit():
+                numeric_subdirs.append(int(name))
+
+        next_index = 0 if len(numeric_subdirs) == 0 else max(numeric_subdirs) + 1
+        run_dir = os.path.join(run_dir, str(next_index))
+        os.makedirs(run_dir, exist_ok=True)
+        return run_dir
+
     def create_coven(self):
         """Create the long-spectra segment list and corresponding redshifts."""
         ls_engine = specwizard.LongSpectra(self.wizard)
@@ -64,20 +79,40 @@ class long_spectra:
         if num_of_ions == 0:
             return
 
-        fig, ax = plt.subplots(num_of_ions, 1, figsize=(20, max(10, 3 * num_of_ions)))
-        if num_of_ions == 1:
+        fig, ax = plt.subplots(2 * num_of_ions, 1, figsize=(20, max(12, 5 * num_of_ions)), sharex=True)
+        if 2 * num_of_ions == 1:
             ax = [ax]
 
         velocity = np.asarray(outputs["velocities"].value)
 
         for i, ion_key in enumerate(ions):
             element, ion_name = ion_key
-            tau = np.asarray(outputs["Ions"][ion_key]["Optical depths"]["Value"].value)
+            tau = np.asarray(outputs["Ions"][ion_key]["Optical depths"]["Value"].value, dtype=float)
             transmission = np.exp(-tau)
-            ax[i].plot(velocity, transmission, color="k")
-            ax[i].set_title(f"{element} {ion_name}")
-            ax[i].set_ylabel(r"$\exp(-\tau)$")
-            ax[i].set_xlabel(r"$v\ [{\rm km\ s}^{-1}]$")
+
+            lambda0 = outputs["Ions"][ion_key]["lambda0"]
+            fvalue = outputs["Ions"][ion_key]["f-value"]
+
+            # Apparent column density per velocity bin in cm^-2 (km/s)^-1.
+            if lambda0 > 0.0 and fvalue > 0.0:
+                n_v = 3.768e14 * tau / (fvalue * lambda0)
+                n_v = np.asarray(n_v.value if hasattr(n_v, 'value') else n_v, dtype=float)
+            else:
+                n_v = np.full_like(tau, np.nan, dtype=float)
+
+            n_v[n_v <= 0.0] = np.nan
+
+            upper = 2 * i
+            lower = upper + 1
+
+            ax[upper].plot(velocity, transmission, color="k")
+            ax[upper].set_title(f"{element} {ion_name}")
+            ax[upper].set_ylabel(r"$\exp(-\tau)$")
+
+            ax[lower].plot(velocity, n_v, color="tab:blue")
+            ax[lower].set_yscale("log")
+            ax[lower].set_ylabel(r"$N_{\rm a}(v)$")
+            ax[lower].set_xlabel(r"$v\ [{\rm km\ s}^{-1}]$")
 
         fig.tight_layout()
         fig.savefig(out_file, dpi=300, bbox_inches="tight")
@@ -118,10 +153,45 @@ class long_spectra:
         plt.close(fig)
         print(f"Saved full keV transmission plot to: {out_file}")
 
+    def column_densities(self, coven):
+        if len(coven) == 0:
+            print("No sightlines found in coven; nothing to print.")
+            return
+
+        print("Column densities by sightline and ion:")
+        for wizard in coven:
+            los_file = wizard.get("snapshot_params", {}).get("file", "unknown")
+            nsight = wizard.get("sightline", {}).get("nsight", "unknown")
+            z_los = wizard.get("z_los", {}).get("Value", "unknown")
+
+            snapshot = specwizard.ReadData(wizard=wizard)
+            particles = snapshot.read_particles()
+            snapshot.header["Cosmo"]["Redshift"] = wizard["z_los"]["Value"]
+
+            sightlineprojection = specwizard.SightLineProjection(wizard)
+            projected_los = sightlineprojection.ProjectData(particles)
+
+            cspec = specwizard.ComputeOpticaldepth(wizard)
+            opticaldepth = cspec.MakeAllOpticaldepth(projected_los)
+
+            print(f"  file={los_file} nsight={nsight} z_los={z_los}")
+            for ion in wizard.get("ionparams", {}).get("Ions", []):
+                try:
+                    nion = opticaldepth[ion]["TotalIonColumnDensity"]["Value"]
+                    nion_value = float(np.asarray(nion))
+                    log_nion = np.log10(nion_value) if nion_value > 0 else -np.inf
+                    print(f"    {ion[0]} {ion[1]}: log10(N/cm^2) = {log_nion:.4f}")
+                except Exception:
+                    print(f"    {ion[0]} {ion[1]}: column density unavailable")
+
     def run(
         self,
+        add_contaminants=False,
+        add_hi_damping_n=None,
+        rebin_to_spectrograph=False,
         save_basename="long_spectra",
         save_kev_plot=True,
+        print_column_densities=False,
     ):
         """
         Build long spectra and optionally apply contaminants/damping/rebinning.
@@ -137,6 +207,11 @@ class long_spectra:
         coven, redshifts = ls_engine.create_coven()
         outputs = ls_engine.do_long_spectra(coven)
 
+        if print_column_densities:
+            self.column_densities(coven)
+
+        run_output_dir = self._run_output_dir(coven)
+
         if add_contaminants:
             outputs = ls_engine.add_contaminants(outputs)
 
@@ -147,14 +222,14 @@ class long_spectra:
         if rebin_to_spectrograph:
             rebinned = ls_engine.rebin_to_spectrograph(outputs)
 
-        npz_file = os.path.join(self.output_dir, f"{save_basename}.npz")
+        npz_file = os.path.join(run_output_dir, f"{save_basename}.npz")
         self.save_npz(outputs, npz_file)
 
-        summary_file = os.path.join(self.output_dir, f"{save_basename}_transmission.png")
+        summary_file = os.path.join(run_output_dir, f"{save_basename}_transmission.png")
         self.plot_summary(outputs, summary_file)
 
         if save_kev_plot:
-            keV_file = os.path.join(self.output_dir, f"{save_basename}_full_keV_transmission.png")
+            keV_file = os.path.join(run_output_dir, f"{save_basename}_full_keV_transmission.png")
             self.plot_full_spectrum_keV(outputs, keV_file)
 
         return {
