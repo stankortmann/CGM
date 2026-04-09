@@ -40,7 +40,7 @@ class long_spectra:
         element, ion = ion_key
         return f"{self._safe_name(element)}__{self._safe_name(ion)}"
 
-    def _save_npz(self, outputs, out_file):
+    def save_npz(self, outputs, out_file):
         payload = {
             "velocities": np.asarray(outputs["velocities"].value),
             "wavelengths": np.asarray(outputs["wavelengths"].value),
@@ -58,7 +58,7 @@ class long_spectra:
         np.savez_compressed(out_file, **payload)
         print(f"Saved long-spectra arrays to: {out_file}")
 
-    def _plot_summary(self, outputs, out_file):
+    def plot_summary(self, outputs, out_file):
         ions = list(outputs["Ions"].keys())
         num_of_ions = len(ions)
         if num_of_ions == 0:
@@ -84,12 +84,44 @@ class long_spectra:
         plt.close(fig)
         print(f"Saved long-spectra summary plot to: {out_file}")
 
+    def total_tau(self, outputs):
+        total_tau = None
+        for ion_data in outputs["Ions"].values():
+            tau = np.asarray(ion_data["Optical depths"]["Value"].value)
+            if total_tau is None:
+                total_tau = np.zeros_like(tau)
+            total_tau += tau
+        return total_tau
+
+    def plot_full_spectrum_keV(self, outputs, out_file):
+        # Energy conversion: E[keV] = 12.398419843320026 / lambda[Angstrom]
+        wavelength_angstrom = np.asarray(outputs["wavelengths"].value)
+        total_tau = self.total_tau(outputs)
+        if total_tau is None:
+            return
+
+        transmission = np.exp(-total_tau)
+        energy_keV = 12.398419843320026 / wavelength_angstrom
+
+        sort_idx = np.argsort(energy_keV)
+        energy_keV = energy_keV[sort_idx]
+        transmission = transmission[sort_idx]
+
+        fig, ax = plt.subplots(1, 1, figsize=(12, 5))
+        ax.plot(energy_keV, transmission, color="k", lw=1.0)
+        ax.set_xlabel(r"$E\ [{\rm keV}]$")
+        ax.set_ylabel(r"$\exp(-\tau_{\rm total})$")
+        ax.set_title("Full Transmission Spectrum")
+        ax.set_ylim(0.0, 1.02)
+        fig.tight_layout()
+        fig.savefig(out_file, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved full keV transmission plot to: {out_file}")
+
     def run(
         self,
-        add_contaminants=False,
-        add_hi_damping_n=None,
-        rebin_to_spectrograph=False,
         save_basename="long_spectra",
+        save_kev_plot=True,
     ):
         """
         Build long spectra and optionally apply contaminants/damping/rebinning.
@@ -116,10 +148,14 @@ class long_spectra:
             rebinned = ls_engine.rebin_to_spectrograph(outputs)
 
         npz_file = os.path.join(self.output_dir, f"{save_basename}.npz")
-        self._save_npz(outputs, npz_file)
+        self.save_npz(outputs, npz_file)
 
         summary_file = os.path.join(self.output_dir, f"{save_basename}_transmission.png")
-        self._plot_summary(outputs, summary_file)
+        self.plot_summary(outputs, summary_file)
+
+        if save_kev_plot:
+            keV_file = os.path.join(self.output_dir, f"{save_basename}_full_keV_transmission.png")
+            self.plot_full_spectrum_keV(outputs, keV_file)
 
         return {
             "coven": coven,
