@@ -43,14 +43,6 @@ class long_spectra:
         os.makedirs(run_dir, exist_ok=True)
         return run_dir
 
-    def create_coven(self):
-        """Create the long-spectra segment list and corresponding redshifts."""
-        ls_engine = specwizard.LongSpectra(self.wizard)
-        # Prevent the internal hard-coded "paper" file override path from being used.
-        ls_engine.paper = True
-        coven, redshifts = ls_engine.create_coven()
-        return coven, redshifts
-
     def _ion_tag(self, ion_key):
         element, ion = ion_key
         return f"{self._safe_name(element)}__{self._safe_name(ion)}"
@@ -204,6 +196,7 @@ class long_spectra:
         ls_engine = specwizard.LongSpectra(self.wizard)
         # Prevent the internal hard-coded "paper" file override path from being used.
         ls_engine.paper = True
+        ls_engine.random_los = True
         coven, redshifts = ls_engine.create_coven()
         outputs = ls_engine.do_long_spectra(coven)
 
