@@ -1,11 +1,12 @@
 import argparse
 import json
 import os
+import re
 
 import numpy as np
 
 
-def load_full_transmission(npz_path):
+def load_transmissions(npz_path):
     data = np.load(npz_path)
 
     if "wavelengths" not in data.files:
@@ -20,17 +21,43 @@ def load_full_transmission(npz_path):
         raise KeyError("No ion optical-depth arrays found (expected keys ending with '__tau')")
 
     total_tau = np.zeros_like(wavelengths, dtype=float)
+    ion_tau = {}
     for key in tau_keys:
         tau = np.asarray(data[key], dtype=float)
         if tau.shape != total_tau.shape:
             raise ValueError(f"Shape mismatch for {key}: {tau.shape} != {total_tau.shape}")
         total_tau += tau
+        ion_tau[key.removesuffix("__tau")] = tau
 
-    transmission = np.exp(-total_tau)
+    full_transmission = np.exp(-total_tau)
     energy_kev = 12.398419843320026 / wavelengths
 
     order = np.argsort(energy_kev)
-    return energy_kev[order], transmission[order]
+    sorted_energy = energy_kev[order]
+
+    ion_transmissions = {}
+    for ion_tag, tau in ion_tau.items():
+        ion_transmissions[ion_tag] = np.exp(-tau)[order]
+
+    return sorted_energy, full_transmission[order], ion_transmissions
+
+
+def ion_display_name(ion_tag):
+    parts = ion_tag.split("__")
+    return " ".join(part.replace("_", " ") for part in parts if part)
+
+
+def ion_filename(ion_tag):
+    safe = re.sub(r"[^A-Za-z0-9_]+", "_", ion_tag).strip("_")
+    safe = re.sub(r"_+", "_", safe).lower()
+    # Keeping requested filename pattern from the prompt.
+    return f"{safe}_transmission.html"
+
+
+def write_html(out_html, html):
+    os.makedirs(os.path.dirname(out_html) or ".", exist_ok=True)
+    with open(out_html, "w", encoding="utf-8") as f:
+        f.write(html)
 
 
 def build_html(energy_kev, transmission, title, window_kev, step_fraction):
@@ -358,7 +385,7 @@ def parse_args():
     parser.add_argument(
         "--out",
         default=None,
-      help="Output HTML file path (default: same directory as NPZ, named transmission_browser.html)",
+        help="Output HTML file path (default: same directory as NPZ, named full_transmission.html)",
     )
     parser.add_argument(
         "--window-kev",
@@ -377,27 +404,44 @@ def parse_args():
 
 def main():
     args = parse_args()
-    energy_kev, transmission = load_full_transmission(args.npz)
+    energy_kev, full_transmission, ion_transmissions = load_transmissions(args.npz)
 
     if args.out is None:
-      out_html = os.path.join(os.path.dirname(args.npz), "transmission_browser.html")
+      out_dir = os.path.dirname(args.npz)
+      out_html = os.path.join(out_dir, "full_transmission.html")
     else:
-        out_html = args.out
+      out_html = args.out
+      out_dir = os.path.dirname(out_html) or "."
 
     title = f"Full Transmission Spectrum | {os.path.basename(args.npz)}"
     html = build_html(
-        energy_kev,
-        transmission,
-        title=title,
-        window_kev=float(args.window_kev),
-        step_fraction=float(args.step_fraction),
+      energy_kev,
+      full_transmission,
+      title=title,
+      window_kev=float(args.window_kev),
+      step_fraction=float(args.step_fraction),
     )
 
-    os.makedirs(os.path.dirname(out_html) or ".", exist_ok=True)
-    with open(out_html, "w", encoding="utf-8") as f:
-        f.write(html)
+    write_html(out_html, html)
+
+    ion_files = []
+    for ion_tag, ion_transmission in sorted(ion_transmissions.items()):
+      ion_name = ion_display_name(ion_tag)
+      ion_title = f"{ion_name} Transmission Spectrum | {os.path.basename(args.npz)}"
+      ion_html = build_html(
+        energy_kev,
+        ion_transmission,
+        title=ion_title,
+        window_kev=float(args.window_kev),
+        step_fraction=float(args.step_fraction),
+      )
+      ion_out = os.path.join(out_dir, ion_filename(ion_tag))
+      write_html(ion_out, ion_html)
+      ion_files.append(ion_out)
 
     print(f"Saved browser app: {out_html}")
+    for ion_out in ion_files:
+      print(f"Saved ion browser app: {ion_out}")
     print("Open this file in your browser.")
 
 
