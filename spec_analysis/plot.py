@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm, Normalize
 from pathlib import Path
+from scipy.interpolate import interp1d
 
 class temperature_density_plotter:
     def __init__(self, density_edges,temperature_edges):
@@ -234,28 +235,49 @@ class column_density_plotter:
         eagle_log_cddf = np.asarray(eagle_log_cddf, dtype=float)
 
         valid_sim = np.isfinite(sim_bin_centers) & np.isfinite(sim_cddf) & (sim_cddf > 0)
-        if valid_sim.sum() < 2:
+        valid_eagle = np.isfinite(eagle_x) & np.isfinite(eagle_log_cddf)
+
+        if valid_sim.sum() < 2 or valid_eagle.sum() == 0:
             return ax
 
         sim_x = sim_bin_centers[valid_sim]
         sim_log_cddf = np.log10(sim_cddf[valid_sim])
 
-        order = np.argsort(sim_x)
-        sim_x = sim_x[order]
-        sim_log_cddf = sim_log_cddf[order]
+        sim_x, sim_unique_idx = np.unique(sim_x, return_index=True)
+        sim_log_cddf = sim_log_cddf[sim_unique_idx]
+        if sim_x.size < 2:
+            return ax
 
-        in_range = (
-            np.isfinite(eagle_x)
-            & np.isfinite(eagle_log_cddf)
-            & (eagle_x >= sim_x.min())
-            & (eagle_x <= sim_x.max())
+        eagle_x = eagle_x[valid_eagle]
+        eagle_log_cddf = eagle_log_cddf[valid_eagle]
+
+        eagle_order = np.argsort(eagle_x)
+        eagle_x = eagle_x[eagle_order]
+        eagle_log_cddf = eagle_log_cddf[eagle_order]
+
+        eagle_x, eagle_unique_idx = np.unique(eagle_x, return_index=True)
+        eagle_log_cddf = eagle_log_cddf[eagle_unique_idx]
+
+        if eagle_x.size == 0:
+            return ax
+
+        interpolator = interp1d(
+            sim_x,
+            sim_log_cddf,
+            kind="linear",
+            bounds_error=False,
+            fill_value=np.nan,
+            assume_sorted=True,
         )
-        if in_range.sum() == 0:
+
+        sim_interp = interpolator(eagle_x)
+        in_range = np.isfinite(sim_interp)
+        if not np.any(in_range):
             return ax
 
         x_eval = eagle_x[in_range]
         eagle_eval = eagle_log_cddf[in_range]
-        sim_interp = np.interp(x_eval, sim_x, sim_log_cddf)
+        sim_interp = sim_interp[in_range]
         delta = sim_interp - eagle_eval
 
         ax.plot(x_eval, delta, label=label, linestyle=linestyle, color=color)
