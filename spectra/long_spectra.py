@@ -47,20 +47,57 @@ class long_spectra:
         element, ion = ion_key
         return f"{self._safe_name(element)}__{self._safe_name(ion)}"
 
+    @staticmethod
+    def _npz_safe_tag(value):
+        return (
+            str(value)
+            .replace(" ", "_")
+            .replace("/", "_")
+            .replace(".", "p")
+            .replace("-", "m")
+        )
+
     def save_npz(self, outputs, out_file):
         payload = {
             "velocities": np.asarray(outputs["velocities"].value),
             "wavelengths": np.asarray(outputs["wavelengths"].value),
         }
 
+        total_tau = None
+        contaminant_tau = None
+
         for ion_key, ion_data in outputs["Ions"].items():
             tag = self._ion_tag(ion_key)
-            payload[f"{tag}__tau"] = np.asarray(ion_data["Optical depths"]["Value"].value)
+            tau = np.asarray(ion_data["Optical depths"]["Value"].value, dtype=float)
+            payload[f"{tag}__tau"] = tau
             payload[f"{tag}__vel"] = np.asarray(ion_data["Velocities"]["Value"].value)
             payload[f"{tag}__dens"] = np.asarray(ion_data["Densities"]["Value"].value)
             payload[f"{tag}__temp"] = np.asarray(ion_data["Temperatures"]["Value"].value)
             payload[f"{tag}__lambda0"] = np.asarray([ion_data["lambda0"]])
             payload[f"{tag}__fvalue"] = np.asarray([ion_data["f-value"]])
+
+            if total_tau is None:
+                total_tau = np.zeros_like(tau)
+            total_tau += tau
+
+            if "Contaminants" in ion_data:
+                for cont_key, cont_val in ion_data["Contaminants"].items():
+                    cont_tau = np.asarray(cont_val.value if hasattr(cont_val, "value") else cont_val, dtype=float)
+                    cont_tag = self._npz_safe_tag(cont_key)
+                    payload[f"{tag}__cont_{cont_tag}__cont_tau"] = cont_tau
+                    if contaminant_tau is None:
+                        contaminant_tau = np.zeros_like(cont_tau)
+                    contaminant_tau += cont_tau
+
+        if total_tau is not None:
+            payload["total_tau"] = total_tau
+            payload["full_transmission"] = np.exp(-total_tau)
+
+        if contaminant_tau is not None:
+            payload["contaminant_tau"] = contaminant_tau
+            total_with_cont = total_tau + contaminant_tau
+            payload["total_tau_with_contaminants"] = total_with_cont
+            payload["full_transmission_with_contaminants"] = np.exp(-total_with_cont)
 
         np.savez_compressed(out_file, **payload)
         print(f"Saved long-spectra arrays to: {out_file}")
