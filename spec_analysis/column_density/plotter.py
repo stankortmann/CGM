@@ -8,7 +8,16 @@ from spec_analysis.data_structure.plot import plot_config
 import numpy as np
 
 
-def get_label(cd_data,data_unpacker,selection_criterium):
+def get_slice_thickness_cMpc(cd_data):
+    """Return projection slice thickness in cMpc, or None if unavailable."""
+    if hasattr(cd_data.cfg.window, "projection_slices"):
+        slices = cd_data.cfg.window.projection_slices
+        if slices:
+            return cd_data.cfg.simulation.box_length / slices
+    return None
+
+
+def get_label(cd_data, data_unpacker, selection_criterium):
 
     if selection_criterium == "box_size":
         return f"Box size: {cd_data.cfg.simulation.box_size:.1f} Mpc"
@@ -25,44 +34,44 @@ def get_label(cd_data,data_unpacker,selection_criterium):
         return rf"Pixel size: {pixel_size_ckpc:.1f}$^2 cKpc^2$"
     elif selection_criterium == "simulation_name":
         return cd_data.simulation_name
+    elif selection_criterium == "compare_slices":
+        return cd_data.simulation_name
     #can add more criteria here as needed
     else:
         raise ValueError(f"Unknown label criterion: {selection_criterium}")
 
 
 def get_label_and_style(cd_data, data_unpacker, cfg_plot):
-    """Return label and linestyle based on selection criterion and filename stem rules."""
+    """Return label, linestyle, and slice thickness based on selection criterion and filename stem rules."""
     label = get_label(cd_data, data_unpacker, cfg_plot.label_criterion)
     line_style = "-"
-    
+    slice_thickness = get_slice_thickness_cMpc(cd_data)
 
-    if getattr(cfg_plot, "stack_total_label", False) :
+    if getattr(cfg_plot, "stack_total_label", False):
         stem = Path(cd_data.hdf5_path).stem
         if not label.endswith(stem):
             if stem == "total":
                 name = "full box projection"
             if stem == "stacked": 
-                name = f"{cd_data.cfg.simulation.box_length/cd_data.cfg.window.projection_slices:.2f} cMpc slice average"
+                name = f"{slice_thickness:.2f} cMpc" if slice_thickness else "slice average"
             label = f"{label} [{name}]"
         if stem == "total":
             line_style = "--"
             
     elif getattr(cfg_plot, "Z_label", False):
-
         if getattr(cd_data.cfg.chemistry, "metallicity", True):
             name = "" #Maybe another tag but for now empty
         else:
             name = rf"[0.1 $Z_\odot$]"
             line_style = "--"
-        
         label = f"{label} {name}"
         
-    elif getattr(cfg_plot, "slice_label", False) and  not getattr(cfg_plot, "stack_total_label", False):
+    elif getattr(cfg_plot, "slice_label", False) and not getattr(cfg_plot, "stack_total_label", False):
         if hasattr(cd_data.cfg.window, "projection_slices"):
-            name = f"{cd_data.cfg.simulation.box_length/cd_data.cfg.window.projection_slices:.2f} cMpc slice average"
+            name = f"{slice_thickness:.2f} cMpc" if slice_thickness else "slice average"
             label = f"{label} [{name}]"
 
-    return label, line_style
+    return label, line_style, slice_thickness
 
 
 def load_eagle_cddf(ion, cfg_plot):
@@ -92,12 +101,15 @@ def plot_eagle_cddf(ax, ion, cfg_plot):
     """
     Overlay EAGLE CDDF data if cfg_plot.plot_eagle is True
     and the corresponding CSV file exists.
+
     """
     eagle_data = load_eagle_cddf(ion, cfg_plot)
     if eagle_data is None:
         return ax
 
     eagle_x, eagle_y = eagle_data
+
+    
 
     ax.scatter(
         eagle_x,
@@ -296,6 +308,7 @@ def run_multiple_halos(cfg_plot: plot_config):
 def run_single(cfg_plot: plot_config):
 
     data_file = Path(cfg_plot.data_files[0])
+    compare_slices_mode = getattr(cfg_plot, "label_criterion", None) == "compare_slices"
 
     cd_data = single_cd(data_file, load_cd=cfg_plot.load_cd)
     data_unpacker = unwrapper(cd_data.cfg)
@@ -308,7 +321,7 @@ def run_single(cfg_plot: plot_config):
         cfg_plot=cfg_plot
     )
     # Get label for this plot based on the selection criterion
-    label, line_style = get_label_and_style(cd_data, data_unpacker, cfg_plot)
+    label, line_style, current_slice_thickness = get_label_and_style(cd_data, data_unpacker, cfg_plot)
     
     # -------------------------
     # Element XY column density map
@@ -380,7 +393,8 @@ def run_single(cfg_plot: plot_config):
             log_scale=True
         )
         # --- CDDF single plotting inside the original data directory ---
-        ax = plot_eagle_cddf(ax, ion, cfg_plot)
+        if not compare_slices_mode:
+            ax = plot_eagle_cddf(ax, ion, cfg_plot)
 
         plt.legend()
         ax.set_title(f"CDDF of {ion}")
@@ -399,7 +413,7 @@ def run_single(cfg_plot: plot_config):
 
         print("Saved", file_path)
 
-        if getattr(cfg_plot, "plot_eagle", False):
+        if getattr(cfg_plot, "plot_eagle", False) and not compare_slices_mode:
             eagle_data = load_eagle_cddf(ion, cfg_plot)
             if eagle_data is not None:
                 eagle_x, eagle_y = eagle_data
@@ -443,19 +457,47 @@ def run_multiple(cfg_plot):
     eagle_data_cache = {}
     simulation_color_map = {}
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0"])
+    compare_slices_mode = getattr(cfg_plot, "label_criterion", None) == "compare_slices"
+    baseline = None
+    baseline_slice_thickness = None
+    baseline_file = None
 
 
     def get_simulation_color(color_key):
-        if color_key not in simulation_color_map:
+        if compare_slices_mode:
+            if color_key not in simulation_color_map:
+                simulation_color_map[color_key] = color_cycle[
+                    len(simulation_color_map) % len(color_cycle)
+                ]
+        else:
             simulation_color_map[color_key] = color_cycle[
                 len(simulation_color_map) % len(color_cycle)
             ]
         return simulation_color_map[color_key]
 
+    # Load baseline for compare_slices mode
+    if compare_slices_mode and cfg_plot.data_files:
+        baseline_file = Path(cfg_plot.data_files[0])
+        baseline_cd = single_cd(baseline_file, load_cd=cfg_plot.load_cd)
+        baseline = {
+            "element_name": baseline_cd.element_name,
+            "element_bin_centers": baseline_cd.element_bin_centers,
+            "element_cddf": baseline_cd.element_cddf,
+            "ions": {},
+        }
+        for ion_name, ion_payload in baseline_cd.ions.items():
+            if isinstance(ion_payload, dict) and "bin_centers" in ion_payload and "cddf" in ion_payload:
+                baseline["ions"][ion_name] = {
+                    "bin_centers": ion_payload["bin_centers"],
+                    "cddf": ion_payload["cddf"],
+                }
+        baseline_slice_thickness = get_slice_thickness_cMpc(baseline_cd)
+
 
 
     for data_file in cfg_plot.data_files:
         data_file = Path(data_file)
+        is_baseline_file = compare_slices_mode and baseline_file is not None and data_file == baseline_file
 
         # --- Load HDF5 data ---
         cd_data = single_cd(data_file, load_cd=cfg_plot.load_cd)
@@ -470,27 +512,44 @@ def run_multiple(cfg_plot):
             cfg_plot=cfg_plot
         )
         # this is the label for this particular data_file, based on the selection criterion
-        label, line_style = get_label_and_style(cd_data, data_unpacker, cfg_plot)
+        label, line_style, current_slice_thickness = get_label_and_style(cd_data, data_unpacker, cfg_plot)
+        plot_label = None if is_baseline_file else label
 
         if getattr(cfg_plot, "slice_label", False) and hasattr(cd_data.cfg.window, "projection_slices"):
             color_key = (cd_data.simulation_name, cd_data.cfg.window.projection_slices)
         else:
-            color_key = cd_data.simulation_name
-
+            color_key = np.random.choice(np.linspace(0, 1, num=1000))  # fallback to random color if no slice info
+        
         line_color = get_simulation_color(color_key)
         # --- Element CDDF ---
         ax_elem = element_ax_dict.get(cd_data.element_name)
-        ax_elem = plotter.plot_cddf_hist(
-            cddf=cd_data.element_cddf,
-            bin_centers=cd_data.element_bin_centers,
-            bin_width=cd_data.element_bin_width,
-            element=cd_data.element_name,
-            label=label,
-            linestyle=line_style,
-            color=line_color,
-            log_scale=True,
-            ax=ax_elem
-        )
+        if compare_slices_mode and baseline is not None and cd_data.element_name == baseline["element_name"]:
+            if ax_elem is None:
+                _, ax_elem = plt.subplots(figsize=(7, 6))
+            ax_elem = plotter.plot_cddf_difference(
+                ax=ax_elem,
+                sim_bin_centers=cd_data.element_bin_centers,
+                sim_cddf=cd_data.element_cddf,
+                eagle_x=np.array([]),
+                eagle_log_cddf=np.array([]),
+                label=plot_label,
+                linestyle=line_style,
+                color=line_color,
+                baseline_cddf=baseline["element_cddf"],
+                baseline_bin_centers=baseline["element_bin_centers"],
+            )
+        else:
+            ax_elem = plotter.plot_cddf_hist(
+                cddf=cd_data.element_cddf,
+                bin_centers=cd_data.element_bin_centers,
+                bin_width=cd_data.element_bin_width,
+                element=cd_data.element_name,
+                label=plot_label,
+                linestyle=line_style,
+                color=line_color,
+                log_scale=True,
+                ax=ax_elem
+            )
         element_ax_dict[cd_data.element_name] = ax_elem
 
         # --- Ion CDDFs ---
@@ -501,21 +560,38 @@ def run_multiple(cfg_plot):
                 print(f"Warning: Ion {ion} not in HDF5, skipping")
                 continue
             ax_ion = ion_ax_dict.get(ion)
-            ax_ion = plotter.plot_cddf_hist(
-                cddf=cd_data.ions[ion]["cddf"],
-                bin_centers=cd_data.ions[ion]["bin_centers"],
-                bin_width=cd_data.ions[ion]["bin_width"],
-                ion=ion,
-                label=label,
-                linestyle=line_style,
-                color=line_color,
-                log_scale=True,
-                ax=ax_ion
-            )
+            if compare_slices_mode and baseline is not None and ion in baseline["ions"]:
+                if ax_ion is None:
+                    _, ax_ion = plt.subplots(figsize=(7, 6))
+
+                ax_ion = plotter.plot_cddf_difference(
+                    ax=ax_ion,
+                    sim_bin_centers=cd_data.ions[ion]["bin_centers"],
+                    sim_cddf=cd_data.ions[ion]["cddf"],
+                    eagle_x=np.array([]),
+                    eagle_log_cddf=np.array([]),
+                    label=plot_label,
+                    linestyle=line_style,
+                    color=line_color,
+                    baseline_cddf=baseline["ions"][ion]["cddf"],
+                    baseline_bin_centers=baseline["ions"][ion]["bin_centers"],
+                )
+            else:
+                ax_ion = plotter.plot_cddf_hist(
+                    cddf=cd_data.ions[ion]["cddf"],
+                    bin_centers=cd_data.ions[ion]["bin_centers"],
+                    bin_width=cd_data.ions[ion]["bin_width"],
+                    ion=ion,
+                    label=plot_label,
+                    linestyle=line_style,
+                    color=line_color,
+                    log_scale=True,
+                    ax=ax_ion
+                )
             
             ion_ax_dict[ion] = ax_ion
 
-            if getattr(cfg_plot, "plot_eagle", False):
+            if getattr(cfg_plot, "plot_eagle", False) and not compare_slices_mode:
                 if ion not in eagle_data_cache:
                     eagle_data_cache[ion] = load_eagle_cddf(ion, cfg_plot)
                 eagle_data = eagle_data_cache[ion]
@@ -542,7 +618,11 @@ def run_multiple(cfg_plot):
     output_dir.mkdir(parents=True, exist_ok=True)
     for element_name, ax in element_ax_dict.items():
         ax.legend()
-        ax.set_title(f"CDDF of {element_name}")
+        if compare_slices_mode:
+            base_txt = f"{baseline_slice_thickness:.2f} cMpc" if baseline_slice_thickness is not None else "baseline"
+            ax.set_title(f"CDDF of {element_name} relative to baseline slice ({base_txt})")
+        else:
+            ax.set_title(f"CDDF of {element_name}")
         plt.tight_layout()
         file_path = output_dir / f"{element_name}.png"
         ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
@@ -552,9 +632,15 @@ def run_multiple(cfg_plot):
     # --- Save combined ion CDDF plots ---
     for ion_name, ax in ion_ax_dict.items():
         # Overlay EAGLE data if requested
-        ax = plot_eagle_cddf(ax, ion_name, cfg_plot)
+        if not compare_slices_mode:
+            ax = plot_eagle_cddf(ax, ion_name, cfg_plot)
+        
         ax.legend()
-        ax.set_title(f"CDDF of {ion_name}")
+        if compare_slices_mode:
+            base_txt = f"{baseline_slice_thickness:.2f} cMpc" if baseline_slice_thickness is not None else "baseline"
+            ax.set_title(f"CDDF of {ion_name} relative to baseline slice ({base_txt})")
+        else:
+            ax.set_title(f"CDDF of {ion_name}")
         plt.tight_layout()
         file_path = output_dir / f"{ion_name}.png"
         ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")

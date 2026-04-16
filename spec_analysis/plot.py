@@ -227,17 +227,31 @@ class column_density_plotter:
         label,
         linestyle="-",
         color=None,
+        baseline_cddf=None,
+        baseline_bin_centers=None,
     ):
-        """Plot delta log10(CDDF) = simulation - EAGLE at EAGLE x locations."""
+        """
+        Plot delta log10(CDDF).
+        
+        If baseline_cddf is provided: delta = sim - baseline (at baseline bin centers).
+        In this case, only baseline comparison is plotted.
+        Otherwise: delta = sim - eagle (at eagle x locations, traditional behavior).
+        
+        Parameters
+        ----------
+        baseline_cddf : array-like, optional
+            Baseline CDDF values to compare against (instead of eagle).
+        baseline_bin_centers : array-like, optional
+            Bin centers of baseline CDDF.
+        """
         sim_bin_centers = np.asarray(sim_bin_centers, dtype=float)
         sim_cddf = np.asarray(sim_cddf, dtype=float)
         eagle_x = np.asarray(eagle_x, dtype=float)
         eagle_log_cddf = np.asarray(eagle_log_cddf, dtype=float)
 
         valid_sim = np.isfinite(sim_bin_centers) & np.isfinite(sim_cddf) & (sim_cddf > 0)
-        valid_eagle = np.isfinite(eagle_x) & np.isfinite(eagle_log_cddf)
 
-        if valid_sim.sum() < 2 or valid_eagle.sum() == 0:
+        if valid_sim.sum() < 2:
             return ax
 
         sim_x = sim_bin_centers[valid_sim]
@@ -248,40 +262,85 @@ class column_density_plotter:
         if sim_x.size < 2:
             return ax
 
-        eagle_x = eagle_x[valid_eagle]
-        eagle_log_cddf = eagle_log_cddf[valid_eagle]
+        # Case 1: Compare to baseline CDDF (e.g., compare_slices mode)
+        if baseline_cddf is not None and baseline_bin_centers is not None:
+            baseline_cddf = np.asarray(baseline_cddf, dtype=float)
+            baseline_bin_centers = np.asarray(baseline_bin_centers, dtype=float)
+            
+            valid_base = np.isfinite(baseline_bin_centers) & np.isfinite(baseline_cddf) & (baseline_cddf > 0)
+            if valid_base.sum() < 2:
+                return ax
+            
+            base_x = baseline_bin_centers[valid_base]
+            base_log_cddf = np.log10(baseline_cddf[valid_base])
+            base_x, base_unique_idx = np.unique(base_x, return_index=True)
+            base_log_cddf = base_log_cddf[base_unique_idx]
+            
+            # Interpolate sim to baseline bins
+            interpolator = interp1d(
+                sim_x,
+                sim_log_cddf,
+                kind="linear",
+                bounds_error=False,
+                fill_value=np.nan,
+                assume_sorted=True,
+            )
+            sim_interp = interpolator(base_x)
+            in_range = np.isfinite(sim_interp)
+            if not np.any(in_range):
+                return ax
+            
+            x_eval = base_x[in_range]
+            base_eval = base_log_cddf[in_range]
+            sim_interp = sim_interp[in_range]
+            delta = sim_interp - base_eval
+            
+            ax.plot(x_eval, delta, label=label, linestyle=linestyle, color=color)
+            ylabel = r"$\Delta\log_{10} f(N)$ (COLIBRE - Baseline)"
+        # Case 2: Compare to EAGLE (traditional behavior)
+        else:
+            valid_eagle = np.isfinite(eagle_x) & np.isfinite(eagle_log_cddf)
+            if valid_eagle.sum() == 0:
+                return ax
+            
+            eagle_x = eagle_x[valid_eagle]
+            eagle_log_cddf = eagle_log_cddf[valid_eagle]
 
-        eagle_order = np.argsort(eagle_x)
-        eagle_x = eagle_x[eagle_order]
-        eagle_log_cddf = eagle_log_cddf[eagle_order]
+            eagle_order = np.argsort(eagle_x)
+            eagle_x = eagle_x[eagle_order]
+            eagle_log_cddf = eagle_log_cddf[eagle_order]
 
-        eagle_x, eagle_unique_idx = np.unique(eagle_x, return_index=True)
-        eagle_log_cddf = eagle_log_cddf[eagle_unique_idx]
+            eagle_x, eagle_unique_idx = np.unique(eagle_x, return_index=True)
+            eagle_log_cddf = eagle_log_cddf[eagle_unique_idx]
 
-        if eagle_x.size == 0:
-            return ax
+            if eagle_x.size == 0:
+                return ax
 
-        interpolator = interp1d(
-            sim_x,
-            sim_log_cddf,
-            kind="linear",
-            bounds_error=False,
-            fill_value=np.nan,
-            assume_sorted=True,
-        )
+            interpolator = interp1d(
+                sim_x,
+                sim_log_cddf,
+                kind="linear",
+                bounds_error=False,
+                fill_value=np.nan,
+                assume_sorted=True,
+            )
 
-        sim_interp = interpolator(eagle_x)
-        in_range = np.isfinite(sim_interp)
-        if not np.any(in_range):
-            return ax
+            sim_interp = interpolator(eagle_x)
+            in_range = np.isfinite(sim_interp)
+            if not np.any(in_range):
+                return ax
 
-        x_eval = eagle_x[in_range]
-        eagle_eval = eagle_log_cddf[in_range]
-        sim_interp = sim_interp[in_range]
-        delta = sim_interp - eagle_eval
+            x_eval = eagle_x[in_range]
+            eagle_eval = eagle_log_cddf[in_range]
+            sim_interp = sim_interp[in_range]
+            delta = sim_interp - eagle_eval
+            
+            ax.plot(x_eval, delta, label=label, linestyle=linestyle, color=color)
+            ylabel = r"$\Delta\log_{10} f(N)$ (COLIBRE - EAGLE)"
 
-        ax.plot(x_eval, delta, label=label, linestyle=linestyle, color=color)
         ax.axhline(0.0, color="black", lw=1.0, alpha=0.6)
         ax.set_xlabel(r"$\log_{10}(N) [cm^{-2}]$")
-        ax.set_ylabel(r"$\Delta\log_{10} f(N)$ (COLIBRE - EAGLE)")
+        ax.set_ylabel(ylabel)
         return ax
+
+    
