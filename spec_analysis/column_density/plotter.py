@@ -2,10 +2,12 @@
 
 import matplotlib.pyplot as plt
 from pathlib import Path
+from typing import List, Optional, Tuple
 from spec_analysis.unpack_data import single_cd, unwrapper
 from spec_analysis import plot  # your column_density_plotter class
 from spec_analysis.data_structure.plot import plot_config
 import numpy as np
+import pandas as pd
 
 
 def get_slice_thickness_cMpc(cd_data):
@@ -97,6 +99,41 @@ def load_eagle_cddf(ion, cfg_plot):
     return data[:, 0], data[:, 1]
 
 
+def load_observational_cddf(ion, cfg_plot):
+    """Return observational CDDF CSV data for an ion as a list of (label, dataframe)."""
+    if not getattr(cfg_plot, "plot_observations", False):
+        return None
+
+    if getattr(cfg_plot, "observational_cddf_directory", None) is None:
+        return None
+
+    ion_directory = Path(cfg_plot.observational_cddf_directory) / ion
+    if not ion_directory.exists() or not ion_directory.is_dir():
+        print(f"Observational directory not found for {ion}, skipping.")
+        return None
+
+    csv_files = sorted(ion_directory.glob("*.csv"))
+    if not csv_files:
+        print(f"No observational CSV files found for {ion}, skipping.")
+        return None
+
+    observational_data = []
+    for file_path in csv_files:
+        try:
+            df = pd.read_csv(file_path)
+        except Exception as exc:
+            print(f"Failed to read observational file {file_path}: {exc}")
+            continue
+
+        if "logN" not in df.columns or "logf" not in df.columns:
+            print(f"Observational file {file_path} is missing logN/logf columns, skipping.")
+            continue
+
+        observational_data.append((file_path.stem, df))
+
+    return observational_data or None
+
+
 def plot_eagle_cddf(ax, ion, cfg_plot):
     """
     Overlay EAGLE CDDF data if cfg_plot.plot_eagle is True
@@ -109,17 +146,60 @@ def plot_eagle_cddf(ax, ion, cfg_plot):
 
     eagle_x, eagle_y = eagle_data
 
-    
+    if cfg_plot.label_criterion == "compare_slices":
+        label="EAGLE (L100/m6 [6.25 cMpc slice average])"
+    else:
+        label="EAGLE"
 
     ax.scatter(
         eagle_x,
         eagle_y,
-        label="EAGLE (L100/m6 [6.25 cMpc slice average])",
+        label=label,
         marker="x",
         s=20,
         color="black",
         zorder=5
     )
+
+    return ax
+
+def plot_observational_cddf(
+    ax,
+    ion,
+    cfg_plot,
+    observational_data: Optional[List[Tuple[str, pd.DataFrame]]] = None,
+):
+    """Plot observational CDDF CSV files for an ion."""
+    if getattr(cfg_plot, "label_criterion", None) == "compare_slices":
+        return ax
+
+    if observational_data is None:
+        observational_data = load_observational_cddf(ion, cfg_plot)
+
+    if not observational_data:
+        return ax
+
+    for label, df in observational_data:
+        logN = df["logN"].values
+        logf = df["logf"].values
+
+        xerr = df["xerr"].values if "xerr" in df.columns else None
+        if "yerr_plus" in df.columns and "yerr_minus" in df.columns:
+            yerr = [df["yerr_minus"].values, df["yerr_plus"].values]
+        elif "yerr" in df.columns:
+            yerr = df["yerr"].values
+        else:
+            yerr = None
+
+        ax.errorbar(
+            logN,
+            logf,
+            xerr=xerr,
+            yerr=yerr,
+            fmt="o",
+            capsize=3,
+            label=label,
+        )
 
     return ax
 
@@ -395,6 +475,7 @@ def run_single(cfg_plot: plot_config):
         # --- CDDF single plotting inside the original data directory ---
         if not compare_slices_mode:
             ax = plot_eagle_cddf(ax, ion, cfg_plot)
+            ax = plot_observational_cddf(ax, ion, cfg_plot)
 
         plt.legend()
         ax.set_title(f"CDDF of {ion}")
@@ -455,6 +536,7 @@ def run_multiple(cfg_plot):
     ion_ax_dict = {}
     ion_diff_ax_dict = {}
     eagle_data_cache = {}
+    observational_data_cache = {}
     simulation_color_map = {}
     color_cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", ["C0"])
     compare_slices_mode = getattr(cfg_plot, "label_criterion", None) == "compare_slices"
@@ -612,6 +694,7 @@ def run_multiple(cfg_plot):
                     )
                     ion_diff_ax_dict[ion] = ax_diff
 
+
     # --- Save combined element CDDF plot ---
 
     output_dir = Path(cfg_plot.data_directory) /cfg_plot.output_directory / f"CDDF_{cfg_plot.label_criterion}"
@@ -634,6 +717,15 @@ def run_multiple(cfg_plot):
         # Overlay EAGLE data if requested
         if not compare_slices_mode:
             ax = plot_eagle_cddf(ax, ion_name, cfg_plot)
+            if getattr(cfg_plot, "plot_observations", False):
+                if ion_name not in observational_data_cache:
+                    observational_data_cache[ion_name] = load_observational_cddf(ion_name, cfg_plot)
+                ax = plot_observational_cddf(
+                    ax,
+                    ion_name,
+                    cfg_plot,
+                    observational_data=observational_data_cache[ion_name],
+                )
         
         ax.legend()
         if compare_slices_mode:

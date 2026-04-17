@@ -21,6 +21,8 @@ class plot_config:
     slice_label: bool = False            # Whether to label the different slices in the legend
     plot_eagle: bool = False               # Whether to plot EAGLE CDDF for comparison
     eagle_cddf_directory: Optional[str] = None  # Path to the directory containing EAGLE CDDF files
+    observational_cddf_directory: Optional[str] = None  # Path to the directory containing observational CDDF files
+    plot_observations: bool = False        # Whether to plot observational CDDF for comparison
     plot_2d_histogram: bool = False           # Whether to plot 2D histogram of column density for single galaxy or box slice
     galaxy_plot: bool = False              # Whether this plot is for a single galaxy (True) or multiple slices (False)
 
@@ -30,10 +32,13 @@ class plot_config:
         """
         data_dir_path = Path(self.data_directory)
         eagle_dir_path = Path(self.eagle_cddf_directory) if self.eagle_cddf_directory else None
+        observational_dir_path = Path(self.observational_cddf_directory) if self.observational_cddf_directory else None
         if not data_dir_path.exists():
             raise FileNotFoundError(f"Data directory does not exist: {self.data_directory}")
         if self.plot_eagle and (eagle_dir_path is None or not eagle_dir_path.exists()):
             raise FileNotFoundError(f"EAGLE CDDF directory does not exist: {self.eagle_cddf_directory}")
+        if self.plot_observations and (observational_dir_path is None or not observational_dir_path.exists()):
+            raise FileNotFoundError(f"Observational CDDF directory does not exist: {self.observational_cddf_directory}")
         #create the output directory if it does not exist
         output_dir_path = data_dir_path / self.output_directory
         output_dir_path.mkdir(parents=True, exist_ok=True)

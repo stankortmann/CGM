@@ -31,6 +31,8 @@ def load_cfg_plot(cfg_path: str) -> plot_config:
         Z_label=cfg_dict.get("Z_label", False),
         plot_eagle=cfg_dict.get("plot_eagle", False),
         eagle_cddf_directory=Path(cfg_dict.get("eagle_cddf_directory", None)) if cfg_dict.get("eagle_cddf_directory", None) else None,
+        observational_cddf_directory=Path(cfg_dict.get("observational_cddf_directory", None)) if cfg_dict.get("observational_cddf_directory", None) else None,
+        plot_observations=cfg_dict.get("plot_observations", False),
         plot_2d_histogram=cfg_dict.get("plot_2d_histogram", False),
         galaxy_plot=cfg_dict.get("galaxy_plot", False)
     )
