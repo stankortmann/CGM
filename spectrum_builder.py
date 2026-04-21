@@ -44,16 +44,25 @@ class spectrum_builder:
         return self._wizard
 
     def run_short_range(self, start, stop):
+        results = []
         for nsight in range(start, stop + 1):
             wizard = copy.deepcopy(self.wizard)
             wizard.setdefault("sightline", {})["nsight"] = nsight
             print(f"Running short spectra for sightline {nsight}")
-            short_spectra(wizard).run()
+            result = short_spectra(wizard).run_spectra()
+            results.append(result)
+            if result is not None and "hdf5_file" in result:
+                print(f"Short spectra HDF5: {result['hdf5_file']}")
+        return results
 
     def run_long(self):
         print("Running long spectra")
         runner = long_spectra(copy.deepcopy(self.wizard))
-        return runner.run()
+        result = runner.run_spectra()
+        hdf5_file = result.get("hdf5_file") if isinstance(result, dict) else None
+        if hdf5_file is not None:
+            print(f"Long spectra HDF5: {hdf5_file}")
+        return result
 
 
 def main():
@@ -61,7 +70,7 @@ def main():
 
     parser.add_argument(
         "--mode",
-        choices=["short", "long"],
+        choices=["short", "long", "plot-hdf5"],
         default="short",
         help="Which spectra pipeline to run",
     )
@@ -79,7 +88,6 @@ def main():
         help="Inclusive short-spectra sightline range; use 'START STOP' or 'START,STOP'",
     )
 
-
     args = parser.parse_args()
 
     builder = spectrum_builder(config_path=args.config)
@@ -91,7 +99,11 @@ def main():
         builder.run_short_range(start, stop)
         return
 
-    builder.run_long()
+    if args.mode == "long":
+        builder.run_long()
+        return
+
+    parser.error(f"Unknown mode: {args.mode}")
 
 
 if __name__ == "__main__":
