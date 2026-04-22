@@ -76,15 +76,18 @@ def get_label_and_style(cd_data, data_unpacker, cfg_plot):
     return label, line_style, slice_thickness
 
 
-def load_eagle_cddf(ion, cfg_plot):
+def load_eagle_cddf(ion, cfg_plot, eagle_directory=None):
     """Return EAGLE CDDF points as (logN, log10f) or None if unavailable."""
     if not getattr(cfg_plot, "plot_eagle", False):
         return None
 
-    if getattr(cfg_plot, "eagle_cddf_directory", None) is None:
+    if eagle_directory is None:
+        eagle_directory = getattr(cfg_plot, "eagle_cddf_directory", None)
+
+    if eagle_directory is None:
         return None
 
-    file_path = Path(cfg_plot.eagle_cddf_directory) / f"{ion}.csv"
+    file_path = Path(eagle_directory) / f"{ion}.csv"
     if not file_path.exists():
         print(f"EAGLE file not found for {ion}, skipping.")
         return None
@@ -140,35 +143,65 @@ def plot_eagle_cddf(ax, ion, cfg_plot):
     and the corresponding CSV file exists.
 
     """
-    eagle_data = load_eagle_cddf(ion, cfg_plot)
-    if eagle_data is None:
+    if getattr(cfg_plot, "Z_label", False):
+        base_dir = getattr(cfg_plot, "eagle_cddf_directory", None)
+        if base_dir is None:
+            return ax
+
+        eagle_data = load_eagle_cddf(ion, cfg_plot, eagle_directory=base_dir)
+        if eagle_data is not None:
+            eagle_x, eagle_y = eagle_data
+            ax.plot(
+                eagle_x,
+                eagle_y,
+                label="EAGLE",
+                color="black",
+
+            )
+
+        no_z_dir = Path(base_dir) / "no_Z"
+        eagle_no_z_data = load_eagle_cddf(ion, cfg_plot, eagle_directory=no_z_dir)
+        if eagle_no_z_data is not None:
+            eagle_x, eagle_y = eagle_no_z_data
+            ax.plot(
+                eagle_x,
+                eagle_y,
+                label=rf"EAGLE [0.1 $Z_\odot$]",
+                linestyle="--",
+                color="black",
+
+            )
+
         return ax
 
-    eagle_x, eagle_y = eagle_data
-
-    if cfg_plot.label_criterion == "compare_slices":
-        label="EAGLE (L100/m6 [6.25 cMpc slice average])"
     else:
-        label="EAGLE"
+        eagle_data = load_eagle_cddf(ion, cfg_plot)
+        if eagle_data is None:
+            return ax
 
-    ax.scatter(
-        eagle_x,
-        eagle_y,
-        label=label,
-        marker="x",
-        s=20,
-        color="black",
-        zorder=5
-    )
+        eagle_x, eagle_y = eagle_data
 
-    return ax
+        if cfg_plot.label_criterion == "compare_slices":
+            label="EAGLE (L100/m6 [6.25 cMpc slice average])"
+        else:
+            label="EAGLE"
+
+        ax.plot(
+            eagle_x,
+            eagle_y,
+            label=label,
+            color="black",
+
+        )
+
+        return ax
+    
 
 def plot_observational_cddf(
     ax,
     ion,
     cfg_plot,
-    observational_data: Optional[List[Tuple[str, pd.DataFrame]]] = None,
-):
+    observational_data: Optional[List[Tuple[str, pd.DataFrame]]] = None,):
     """Plot observational CDDF CSV files for an ion."""
     if getattr(cfg_plot, "label_criterion", None) == "compare_slices":
         return ax
@@ -502,7 +535,7 @@ def run_single(cfg_plot: plot_config):
                 ax_diff = plotter.plot_cddf_difference(
                     ax=ax_diff,
                     sim_bin_centers=cd_data.ions[ion]["bin_centers"],
-                    sim_cddf=cd_data.ions[ion]["cddf"] * 16,
+                    sim_cddf=cd_data.ions[ion]["cddf"],
                     eagle_x=eagle_x,
                     eagle_log_cddf=eagle_y,
                     label=label,
@@ -546,12 +579,7 @@ def run_multiple(cfg_plot):
 
 
     def get_simulation_color(color_key):
-        if compare_slices_mode:
-            if color_key not in simulation_color_map:
-                simulation_color_map[color_key] = color_cycle[
-                    len(simulation_color_map) % len(color_cycle)
-                ]
-        else:
+        if color_key not in simulation_color_map:
             simulation_color_map[color_key] = color_cycle[
                 len(simulation_color_map) % len(color_cycle)
             ]
@@ -599,6 +627,9 @@ def run_multiple(cfg_plot):
 
         if getattr(cfg_plot, "slice_label", False) and hasattr(cd_data.cfg.window, "projection_slices"):
             color_key = (cd_data.simulation_name, cd_data.cfg.window.projection_slices)
+        elif getattr(cfg_plot, "Z_label", False):
+            
+            color_key = cd_data.simulation_name
         else:
             color_key = np.random.choice(np.linspace(0, 1, num=1000))  # fallback to random color if no slice info
         
@@ -674,9 +705,30 @@ def run_multiple(cfg_plot):
             ion_ax_dict[ion] = ax_ion
 
             if getattr(cfg_plot, "plot_eagle", False) and not compare_slices_mode:
-                if ion not in eagle_data_cache:
-                    eagle_data_cache[ion] = load_eagle_cddf(ion, cfg_plot)
-                eagle_data = eagle_data_cache[ion]
+                if getattr(cfg_plot, "Z_label", False):
+                    base_dir = getattr(cfg_plot, "eagle_cddf_directory", None)
+                    if base_dir is None:
+                        eagle_data = None
+                    # compare to either constant metallicity or metallicity-dependent EAGLE CDDF based on the HDF5 filename and config
+                    else:
+                        if "no_Z" in Path(cd_data.hdf5_path).parts or not getattr(cd_data.cfg.chemistry, "metallicity", True):
+                            eagle_directory = Path(base_dir) / "no_Z"
+                        else:
+                            eagle_directory = base_dir
+
+                        cache_key = (ion, str(eagle_directory))
+                        if cache_key not in eagle_data_cache:
+                            eagle_data_cache[cache_key] = load_eagle_cddf(
+                                ion,
+                                cfg_plot,
+                                eagle_directory=eagle_directory,
+                            )
+                        eagle_data = eagle_data_cache[cache_key]
+                else:
+                    if ion not in eagle_data_cache:
+                        eagle_data_cache[ion] = load_eagle_cddf(ion, cfg_plot)
+                    eagle_data = eagle_data_cache[ion]
+
                 if eagle_data is not None:
                     eagle_x, eagle_y = eagle_data
                     ax_diff = ion_diff_ax_dict.get(ion)
