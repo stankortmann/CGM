@@ -89,18 +89,18 @@ class ShortSpectraPlotter:
             axes[1, col].set_ylim(0, 1)
 
             axes[2, col].plot(x, log_tau_weighted_number_density, color="tab:blue", lw=1.2)
-            axes[2, col].set_ylabel(r"$\log_{10}(n_{\tau\,weighted})[cm^{-3}]$")
+            axes[2, col].set_ylabel(r"$\log(n_{ion\,\tau\,weighted})[cm^{-3}]$")
             axes[2, col].set_xlabel(xlabel)
             axes[2, col].set_ylim(-9, -2)
 
 
             axes[3, col].plot(x, log_tau_weighted_hydrogen_number_density, color="tab:blue", lw=1.2)
-            axes[3, col].set_ylabel(r"$\log_{10}(n_{H\,\tau\,weighted})[cm^{-3}]$")
+            axes[3, col].set_ylabel(r"$\log(n_{H\,\tau\,weighted})[cm^{-3}]$")
             axes[3, col].set_xlabel(xlabel)
             axes[3, col].set_ylim(-7, -2)
 
             axes[4, col].plot(x, log_tau_weighted_temperature, color="tab:red", lw=1.2)
-            axes[4, col].set_ylabel(r"$\log_{10}(T_{\tau\,weighted})$")
+            axes[4, col].set_ylabel(r"$\log(T_{\tau\,weighted})$")
             axes[4, col].set_xlabel(xlabel)
             axes[4, col].set_ylim(4, 8)
 
@@ -108,7 +108,7 @@ class ShortSpectraPlotter:
             axes[5, col].plot(x, tau_weighted_metallicity / Z_solar, color="tab:purple", lw=1.2)
             axes[5, col].set_ylabel(r"$Z_{\tau\,weighted}[Z_{\odot}]$")
             axes[5, col].set_xlabel(xlabel)
-            axes[5, col].set_ylim(0.2, 1.5)
+            axes[5, col].set_ylim(0.2, 2)
 
 
             for row in range(nrows):

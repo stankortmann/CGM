@@ -295,8 +295,9 @@ class column_density_plotter:
             sim_interp = sim_interp[in_range]
             delta = sim_interp - base_eval
             
-            ax.plot(x_eval, delta, label=label, linestyle=linestyle, color=color)
-            ylabel = r"$\Delta\log_{10} f(N)$ (COLIBRE - Baseline)"
+            ax.plot(x_eval, 10**delta, label=label, linestyle=linestyle, color=color)
+            #ylabel = r"$\Delta\log_{10} f(N)$ (COLIBRE/Baseline)"
+            ylabel = r"$\frac{f(N)}{f_{\text{Baseline}}(N)}$"
         # Case 2: Compare to EAGLE (traditional behavior)
         else:
             valid_eagle = np.isfinite(eagle_x) & np.isfinite(eagle_log_cddf)

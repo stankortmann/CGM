@@ -624,10 +624,12 @@ def run_multiple(cfg_plot):
         # this is the label for this particular data_file, based on the selection criterion
         label, line_style, current_slice_thickness = get_label_and_style(cd_data, data_unpacker, cfg_plot)
         plot_label = None if is_baseline_file else label
-
+        """
         if getattr(cfg_plot, "slice_label", False) and hasattr(cd_data.cfg.window, "projection_slices"):
             color_key = (cd_data.simulation_name, cd_data.cfg.window.projection_slices)
-        elif getattr(cfg_plot, "Z_label", False):
+
+        """
+        if getattr(cfg_plot, "Z_label", False):
             
             color_key = cd_data.simulation_name
         else:
