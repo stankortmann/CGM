@@ -38,7 +38,7 @@ class ShortSpectraPlotter:
             raise ValueError(f"No ions found for LOS_{nsight}")
 
         ncols = len(ions)
-        nrows = 4
+        nrows = 6
         fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 18), squeeze=False)
         fig.suptitle(f"Short spectrum diagnostics for LOS_{nsight}", fontsize=18)
 
@@ -59,10 +59,13 @@ class ShortSpectraPlotter:
             transmission = np.exp(-tau)
 
             element_density = element_weighted["densities"]
+            
             ion_density = ion_weighted["densities"]
             tau_weighted_density = spectrum["densities"]
             tau_weighted_number_density = tau_weighted_density / self.masses.get(element, 1.0 * self.constants["amu"])
             tau_weighted_temperature = spectrum["temperatures"]
+            tau_weighted_hydrogen_number_density = spectrum["hydrogen_densities"]
+            tau_weighted_metallicity = spectrum["metallicities"]
 
             with np.errstate(divide="ignore", invalid="ignore"):
                 ratio = np.where(element_density > 0, ion_density / element_density, np.nan)
@@ -72,25 +75,41 @@ class ShortSpectraPlotter:
                 log_tau_weighted_density = np.log10(np.where(tau_weighted_density > 0, tau_weighted_density, np.nan))
                 log_tau_weighted_number_density = np.log10(np.where(tau_weighted_number_density.value > 0, tau_weighted_number_density.value, np.nan))
                 log_tau_weighted_temperature = np.log10(np.where(tau_weighted_temperature > 0, tau_weighted_temperature, np.nan))
+                log_tau_weighted_hydrogen_number_density = np.log10(np.where(tau_weighted_hydrogen_number_density > 0, tau_weighted_hydrogen_number_density, np.nan))
 
             axes[0, col].plot(x, tau, color="k", lw=1.2)
             axes[0, col].set_title(f"{ion}, log N = {np.log10(spectrum['total_ion_column_density']):.2f}", fontsize=14)
             axes[0, col].set_ylabel(r"$\tau$")
             axes[0, col].set_xlabel(xlabel)
+            axes[0, col].set_ylim(0, 2)
 
             axes[1, col].plot(x, transmission, color="tab:green", lw=1.2)
             axes[1, col].set_ylabel(r"$T=\exp(-\tau)$")
             axes[1, col].set_xlabel(xlabel)
-            
+            axes[1, col].set_ylim(0, 1)
 
             axes[2, col].plot(x, log_tau_weighted_number_density, color="tab:blue", lw=1.2)
             axes[2, col].set_ylabel(r"$\log_{10}(n_{\tau\,weighted})[cm^{-3}]$")
             axes[2, col].set_xlabel(xlabel)
-            
+            axes[2, col].set_ylim(-9, -2)
 
-            axes[3, col].plot(x, log_tau_weighted_temperature, color="tab:red", lw=1.2)
-            axes[3, col].set_ylabel(r"$\log_{10}(T_{\tau\,weighted})$")
+
+            axes[3, col].plot(x, log_tau_weighted_hydrogen_number_density, color="tab:blue", lw=1.2)
+            axes[3, col].set_ylabel(r"$\log_{10}(n_{H\,\tau\,weighted})[cm^{-3}]$")
             axes[3, col].set_xlabel(xlabel)
+            axes[3, col].set_ylim(-7, -2)
+
+            axes[4, col].plot(x, log_tau_weighted_temperature, color="tab:red", lw=1.2)
+            axes[4, col].set_ylabel(r"$\log_{10}(T_{\tau\,weighted})$")
+            axes[4, col].set_xlabel(xlabel)
+            axes[4, col].set_ylim(4, 8)
+
+            Z_solar = 0.0134
+            axes[5, col].plot(x, tau_weighted_metallicity / Z_solar, color="tab:purple", lw=1.2)
+            axes[5, col].set_ylabel(r"$Z_{\tau\,weighted}[Z_{\odot}]$")
+            axes[5, col].set_xlabel(xlabel)
+            axes[5, col].set_ylim(0.2, 1.5)
+
 
             for row in range(nrows):
                 axes[row, col].grid(alpha=0.25)
