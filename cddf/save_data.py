@@ -2,6 +2,7 @@ import json
 from dataclasses import asdict, is_dataclass
 import h5py
 import numpy as np
+from mpi4py import MPI
 from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
 
 class omega_saver:
