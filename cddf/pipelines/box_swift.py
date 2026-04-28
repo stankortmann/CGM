@@ -7,10 +7,10 @@ from pathlib import Path
 
 
 # own modules
-from spec_analysis import unpack_data
-from spec_analysis import density_profiles
-from spec_analysis import plot
-from spec_analysis import save_data
+from cddf import unpack_data
+from cddf import density_profiles
+from cddf import plot
+from cddf import save_data
 
 def run_box_column_density(cfg):
     """

@@ -2,11 +2,11 @@
 
 import argparse
 import yaml
-import spec_analysis.data_structure.simulation as ds
-from spec_analysis.column_density.galaxy_swift import run_halo_column_density
-from spec_analysis.column_density.box_swift import run_box_column_density  
-from spec_analysis.column_density.box_mpi import run_box_column_density_parallel
-from spec_analysis.column_density.box_mpi_multiple import run_slice_column_density_parallel
+import cddf.data_structure.simulation as ds
+from cddf.pipelines.galaxy_swift import run_halo_column_density
+from cddf.pipelines.box_swift import run_box_column_density  
+from cddf.pipelines.box_mpi import run_box_column_density_parallel
+from cddf.pipelines.box_mpi_multiple import run_slice_column_density_parallel
 from pathlib import Path
 import h5py
 #for now not importing the box_delta.py, this is not needed for now

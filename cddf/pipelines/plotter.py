@@ -1,11 +1,11 @@
-# spec_analysis/column_density/replot.py
+# cddf/column_density/replot.py
 
 import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import List, Optional, Tuple
-from spec_analysis.unpack_data import single_cd, unwrapper
-from spec_analysis import plot  # your column_density_plotter class
-from spec_analysis.data_structure.plot import plot_config
+from cddf.unpack_data import single_cd, unwrapper
+from cddf import plot  # your column_density_plotter class
+from cddf.data_structure.plot import plot_config
 import numpy as np
 import pandas as pd
 
@@ -22,7 +22,7 @@ def get_slice_thickness_cMpc(cd_data):
 def get_label(cd_data, data_unpacker, selection_criterium):
 
     if selection_criterium == "box_size":
-        return f"Box size: {cd_data.cfg.simulation.box_size:.1f} Mpc"
+        return cd_data.simulation_name
     elif selection_criterium == "redshift":
         return f"z= {data_unpacker.redshift:.2f}"
     elif selection_criterium == "file_name":
@@ -632,6 +632,7 @@ def run_multiple(cfg_plot):
         if getattr(cfg_plot, "Z_label", False):
             
             color_key = cd_data.simulation_name
+        
         else:
             color_key = np.random.choice(np.linspace(0, 1, num=1000))  # fallback to random color if no slice info
         
@@ -789,6 +790,7 @@ def run_multiple(cfg_plot):
             ax.set_title(f"CDDF of {ion_name}")
         plt.tight_layout()
         file_path = output_dir / f"{ion_name}.png"
+        #ax.set_xlim(13,None)
         ax.figure.savefig(file_path, dpi=300, bbox_inches="tight")
         plt.close(ax.figure)
         print(f"Saved combined ion CDDF: {file_path}")

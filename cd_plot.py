@@ -3,8 +3,8 @@
 import argparse
 import yaml
 from pathlib import Path
-from spec_analysis.data_structure.plot import plot_config
-from spec_analysis.column_density import plotter
+from cddf.data_structure.plot import plot_config
+from cddf.pipelines import plotter
 
 
 def load_cfg_plot(cfg_path: str) -> plot_config:

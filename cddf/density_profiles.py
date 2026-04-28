@@ -6,9 +6,9 @@ from swiftsimio.visualisation.projection import project_gas
 from swiftsimio.objects import cosmo_array, cosmo_factor
 
 #own modules
-from spec_analysis import chemistry as chem
-from spec_analysis import plot
-from spec_analysis import cosmology as cosmo
+from cddf import chemistry as chem
+from cddf import plot
+from cddf import cosmology as cosmo
 
 
 

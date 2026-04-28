@@ -8,11 +8,11 @@ from swiftsimio.objects import cosmo_array
 from mpi4py import MPI
 
 # own modules
-from spec_analysis import unpack_data
-from spec_analysis import density_profiles
-from spec_analysis import plot
-from spec_analysis import save_data
-from spec_analysis import chemistry as chem
+from cddf import unpack_data
+from cddf import density_profiles
+from cddf import plot
+from cddf import save_data
+from cddf import chemistry as chem
 
 
 def _assemble_global_from_tiles(tile_maps, n_tile, tile_res, full_res):

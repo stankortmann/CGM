@@ -14,7 +14,7 @@ import pandas
 import swiftsimio as swift
 from swiftsimio import load
 import json
-from spec_analysis import plot
+from cddf import plot
 from swiftsimio.objects import cosmo_array, cosmo_quantity, cosmo_factor
 from types import SimpleNamespace
 

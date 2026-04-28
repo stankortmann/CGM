@@ -7,10 +7,10 @@ from mpi4py import MPI
 import os
 
 # own modules
-from spec_analysis import unpack_data
-from spec_analysis import density_profiles
-from spec_analysis.save_data import projection_saver
-from spec_analysis import chemistry as chem
+from cddf import unpack_data
+from cddf import density_profiles
+from cddf.save_data import projection_saver
+from cddf import chemistry as chem
 
 
 

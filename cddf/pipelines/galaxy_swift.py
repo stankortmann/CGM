@@ -5,9 +5,9 @@ import numpy as np
 import unyt as u
 from swiftsimio.objects import cosmo_quantity
 
-import spec_analysis.chemistry as chem
+import cddf.chemistry as chem
 
-from spec_analysis import density_profiles, unpack_data, galaxy_selection as gal_sel, save_data
+from cddf import density_profiles, unpack_data, galaxy_selection as gal_sel, save_data
 
 
 
