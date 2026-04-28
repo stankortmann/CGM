@@ -7,6 +7,7 @@ from cddf.pipelines.galaxy_swift import run_halo_column_density
 from cddf.pipelines.box_swift import run_box_column_density  
 from cddf.pipelines.box_mpi import run_box_column_density_parallel
 from cddf.pipelines.box_mpi_multiple import run_slice_column_density_parallel
+from cddf.pipelines.omega_parameter import run_omega_parameter
 from pathlib import Path
 import h5py
 #for now not importing the box_delta.py, this is not needed for now
@@ -68,6 +69,10 @@ def main():
     if getattr(cfg.galaxy, "single_galaxy", False):
         print("\nRunning single-galaxy column density analysis...") if rank == 0 else None
         run_halo_column_density(cfg)
+
+    elif getattr(cfg.omega_ion, "calculate", False):
+        print("\nRunning omega parameter analysis...") if rank == 0 else None
+        run_omega_parameter(cfg)
     else:
         print("\nRunning full box column density analysis...") if rank == 0 else None
         if comm is not None and size > 1:

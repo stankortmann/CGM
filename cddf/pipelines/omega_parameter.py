@@ -9,7 +9,7 @@ from cddf.chemistry import CHIMES_DICT, elements, chimes
 from cddf.unpack_data import unwrapper
 from cddf.save_data import omega_saver
 
-def main(cfg):
+def run_omega_parameter(cfg):
 	comm = MPI.COMM_WORLD
 	rank = comm.Get_rank()
 	size = comm.Get_size()
