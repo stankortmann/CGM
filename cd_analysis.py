@@ -56,8 +56,7 @@ def main():
         window=ds.Window(**cfg_dict['window']),
         chemistry=ds.Chemistry(**cfg_dict['chemistry']),
         cddf=ds.Cddf(**cfg_dict['cddf']),
-        galaxy=ds.Galaxy(**cfg_dict['galaxy']),
-        omega_ion=ds.Omega_ion(**cfg_dict['omega_ion'])
+        galaxy=ds.Galaxy(**cfg_dict['galaxy'])
     )
 
     # --- Print all config parameters ---
