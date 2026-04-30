@@ -51,13 +51,14 @@ def main():
 
     # --- Create config object ---
     cfg = ds.Config(
-        simulation=ds.Simulation(**cfg_dict['simulation']),
-        data_output=ds.Data_output(**cfg_dict['data_output']),
-        monitoring=ds.Monitoring(**cfg_dict['monitoring']),
-        window=ds.Window(**cfg_dict['window']),
-        chemistry=ds.Chemistry(**cfg_dict['chemistry']),
-        cddf=ds.Cddf(**cfg_dict['cddf']),
-        galaxy=ds.Galaxy(**cfg_dict['galaxy'])
+        simulation=ds.Simulation(**cfg_dict.get('simulation', {})),
+        data_output=ds.Data_output(**cfg_dict.get('data_output', {})),
+        monitoring=ds.Monitoring(**cfg_dict.get('monitoring', {})),
+        window=ds.Window(**cfg_dict.get('window', {})),
+        chemistry=ds.Chemistry(**cfg_dict.get('chemistry', {})),
+        cddf=ds.Cddf(**cfg_dict.get('cddf', {})),
+        galaxy=ds.Galaxy(**cfg_dict.get('galaxy', {})),
+        omega_ion=ds.Omega_ion(**cfg_dict.get('omega_ion', {}))
     )
 
     # --- Print all config parameters ---

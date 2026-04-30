@@ -16,12 +16,13 @@ class omega_saver:
         import h5py
         from pathlib import Path
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
-        output_path = str(Path(self.output_dir) / f"omega_parameters_z{self.redshift:.3f}.hdf5")
+        output_path = str(Path(self.output_dir) / f"omega_parameters.hdf5")
         with h5py.File(output_path, 'w') as f:
             f.attrs['redshift'] = self.redshift
             f.attrs['box_size_Mpc'] = float(self.box_size)
             omega_grp = f.create_group('omega_parameters')
             for ion, omega in self.omega_params.items():
+                print(f"Saving Omega for {ion}: {omega:.3e}")
                 omega_grp.create_dataset(ion, data=omega)
         print(f"[omega_saver] Omega parameters saved to {output_path}")
 
