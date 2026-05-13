@@ -6,17 +6,18 @@ from mpi4py import MPI
 from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
 
 class omega_saver:
-    def __init__(self, output_dir, redshift, box_size, omega_params):
+    def __init__(self, output_dir, redshift, box_size, omega_params, output_filename="omega_parameters.hdf5"):
         self.output_dir = output_dir
         self.redshift = redshift
         self.box_size = box_size
         self.omega_params = omega_params
+        self.output_filename = output_filename
 
     def save(self):
         import h5py
         from pathlib import Path
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
-        output_path = str(Path(self.output_dir) / f"omega_parameters.hdf5")
+        output_path = str(Path(self.output_dir) / self.output_filename)
         with h5py.File(output_path, 'w') as f:
             f.attrs['redshift'] = self.redshift
             f.attrs['box_size_Mpc'] = float(self.box_size)

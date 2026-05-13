@@ -24,6 +24,9 @@ class Cddf:
 @dataclass
 class Omega_ion:
     calculate: bool = False
+    slices: int = 6
+    randomize_grid: bool = False
+    grid_seed: int = 0
 
 
 
