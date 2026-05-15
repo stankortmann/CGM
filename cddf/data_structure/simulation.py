@@ -3,52 +3,60 @@ from typing import List, Union
 
 @dataclass
 class Simulation:
-    main_dir: str
-    chimes_table_dir: str
-    box_length: int
-    resolution: int
-    name: str
-    snapshot_number: Union[int, List[int]]  # can be a single int or list
+    main_dir: str = "/cosma8/data/dp004/colibre/Runs"
+    chimes_table_dir: str = "/cosma8/data/dp004/jlvc76/COLIBRE/Tables/equilibrium_rates_and_speciesfractions/abundances_full/"
+    box_length: int = 100
+    resolution: int = 6
+    name: str = "Thermal"
+    snapshot_number: Union[int, List[int]] = 127  # can be a single int or list
 
 @dataclass
 class Data_output:
-    main_dir: str
-    results_dir:str
+    main_dir: str = "/cosma8/data/do012/dc-kort1/CGM/"
+    results_dir:str = "results"
     save_projection: bool = False
 
 @dataclass
 class Cddf:
-    log_range: List[float]
-    bins: int
+    log_range: List[float] = field(default_factory=lambda: [13.0, 20.0])
+    bins: int = 1000
+
+@dataclass
+class Omega_ion:
+    calculate: bool = False
+    slices: int = 6
+    randomize_grid: bool = False
+    grid_seed: int = 0
+
 
 
 @dataclass
 class Monitoring:
-    cpu_ram_monitor: bool
-    monitor_interval: int
+    cpu_ram_monitor: bool = False
+    monitor_interval: int = 100
+
 
 @dataclass
 class Window:
-    x: List[float]
-    y: List[float]
-    z: List[float]
+    x: List[float] = field(default_factory=lambda: [0.0, 1.0])
+    y: List[float] = field(default_factory=lambda: [0.0, 1.0])
+    z: List[float] = field(default_factory=lambda: [0.0, 1.0])  
     
-    resolution: int
-    z_center: float
-    z_range: List[float]
-    #defaulted
+    resolution: int = 1000
+    z_center: float = 1.0
+    z_range: List[float] = field(default_factory=lambda: [0.0, 2.0])
     projection_axis: str = "z"
     projection_slices: int =1
 
 @dataclass
 class Chemistry:
-     element: Union[str, List[str]]
-     ion: Union[str, List[str]]
+     element: Union[str, List[str]] = None
+     ion: Union[str, List[str]] = None
      metallicity: bool = True
+
     
 @dataclass
-class Galaxy:
-     
+class Galaxy:     
      single_galaxy: bool = False 
      galaxy_window: str = None
      extend_unit: float = "kpc"
@@ -72,5 +80,6 @@ class Config:
     galaxy: Galaxy
     monitoring: Monitoring
     cddf: Cddf
+    omega_ion: Omega_ion
 
   

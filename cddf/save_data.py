@@ -1,9 +1,31 @@
 import json
 from dataclasses import asdict, is_dataclass
-from mpi4py import MPI
 import h5py
 import numpy as np
+from mpi4py import MPI
 from swiftsimio.objects import cosmo_array, cosmo_factor, cosmo_quantity
+
+class omega_saver:
+    def __init__(self, output_dir, redshift, box_size, omega_params, output_filename="omega_parameters.hdf5"):
+        self.output_dir = output_dir
+        self.redshift = redshift
+        self.box_size = box_size
+        self.omega_params = omega_params
+        self.output_filename = output_filename
+
+    def save(self):
+        import h5py
+        from pathlib import Path
+        Path(self.output_dir).mkdir(parents=True, exist_ok=True)
+        output_path = str(Path(self.output_dir) / self.output_filename)
+        with h5py.File(output_path, 'w') as f:
+            f.attrs['redshift'] = self.redshift
+            f.attrs['box_size_Mpc'] = float(self.box_size)
+            omega_grp = f.create_group('omega_parameters')
+            for ion, omega in self.omega_params.items():
+                print(f"Saving Omega for {ion}: {omega:.3e}")
+                omega_grp.create_dataset(ion, data=omega)
+        print(f"[omega_saver] Omega parameters saved to {output_path}")
 
 
 def create_dataset_compressed(group, name, data, dtype=np.float64):
@@ -44,8 +66,11 @@ def cfg_to_serializable(cfg):
     return cfg
 
 
-class projection_saver:
+
+
+# Class for saving omega parameters to HDF5
     """Handles HDF5 I/O for 2D column density projections and CDDFs."""
+class projection_saver:
 
     def __init__(self, cfg, use_compression=False, dtype=np.float64, comm=None):
         """

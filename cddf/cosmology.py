@@ -145,9 +145,7 @@ class cosmo_tools:
             redshift_bin_width=self.bin_width,
             update=new_update)
         return new_init
-    
 
-    
     def E(self, z):
         """Dimensionless Hubble parameter E(z) = H(z)/H0."""
         
