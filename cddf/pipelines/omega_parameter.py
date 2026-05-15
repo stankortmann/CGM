@@ -35,8 +35,11 @@ def run_omega_parameter(cfg):
 		total_z_slices = 1
 	slice_start = int(os.environ.get('CD_SLICE_START', '0'))
 	slices_per_job = int(os.environ.get('CD_SLICE_COUNT', str(total_z_slices)))
-	if slices_per_job < 1:
+	part_num = int(os.environ.get('JOB_CHUNK_INDEX', '1'))
+	if slices_per_job < 1 or slices_per_job == total_z_slices:
 		slices_per_job = total_z_slices
+		part_num = "total"
+
 	randomize_grid = getattr(cfg.omega_ion, 'randomize_grid', True)
 	shuffle_seed = getattr(cfg.omega_ion, 'grid_seed', 0) if randomize_grid else None
 	slice_stop = min(slice_start + slices_per_job, total_z_slices)
@@ -54,7 +57,7 @@ def run_omega_parameter(cfg):
 			f"total_slices={total_z_slices}, slices_per_job={slices_per_job}, "
 			f"slice_range=[{slice_start}, {slice_stop})"
 		)
-
+	
 	data_unpacker = unwrapper(cfg)
 
 	# Box size and volume (comoving)
